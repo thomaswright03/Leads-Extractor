@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "slk-dashboard",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/ssirstaff/Desktop/untitled folder/UT/slk/dashboard.py"],
+      "port": 8765
+    }
+  ]
+}

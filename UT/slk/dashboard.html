@@ -1,0 +1,1425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probate Property Leads</title>
+<style>
+  :root {
+    --navy: #1f2a3d;
+    --navy-light: #2e3d57;
+    /* Text color for headings/links/numbers - distinct from --navy because
+       --navy also backs the always-dark header bar. Overriding --navy alone
+       for dark mode would make the header's own white text unreadable. */
+    --heading: #1f2a3d;
+    --gold: #b8902e;
+    --gold-light: #e9c874;
+    --cream: #faf6ee;
+    --card: #ffffff;
+    --ink: #26303f;
+    --muted: #6b7688;
+    --border: #e7e1d3;
+    --confirmed-bg: #eef6ee;
+    --confirmed-ink: #2f6b3a;
+    --review-bg: #fbf3e4;
+    --review-ink: #93691e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  header.top {
+    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    color: #fff;
+    padding: 36px 32px 44px;
+  }
+  .top-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand .mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, var(--gold-light), var(--gold) 70%);
+    flex-shrink: 0;
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.08);
+  }
+  .brand h1 {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  .brand p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+  }
+  .generated {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    text-align: right;
+  }
+
+  main {
+    max-width: 1180px;
+    margin: -26px auto 60px;
+    padding: 0 32px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 8px 20px rgba(31,42,61,0.08);
+  }
+  .stat-card .num {
+    font-family: Georgia, serif;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--heading);
+    line-height: 1;
+  }
+  .stat-card .label {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .stat-card.confirmed .num { color: var(--confirmed-ink); }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(31,42,61,0.06);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .panel-head h2 {
+    margin: 0;
+    font-family: Georgia, serif;
+    font-size: 18px;
+    color: var(--heading);
+  }
+  .panel-head .sub {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .search-box {
+    position: relative;
+  }
+  .search-box input {
+    padding: 9px 14px 9px 34px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 13.5px;
+    width: 240px;
+    background: var(--cream);
+    color: var(--ink);
+  }
+  .search-box::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--muted);
+    border-radius: 50%;
+    transform: translateY(-60%);
+  }
+  .search-box::after {
+    content: "";
+    position: absolute;
+    left: 21px;
+    top: 62%;
+    width: 6px;
+    height: 2px;
+    background: var(--muted);
+    transform: rotate(45deg);
+  }
+  button.ghost {
+    border: 1px solid var(--border);
+    background: var(--cream);
+    color: var(--heading);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.ghost:hover { background: #f2ecdd; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 10px 22px;
+    border-bottom: 1px solid var(--border);
+    background: #fbf9f4;
+  }
+  thead th[data-key] {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 26px;
+  }
+  thead th[data-key]:hover { color: var(--heading, var(--navy)); }
+  thead th[data-key]::after {
+    content: "\2195";
+    position: absolute;
+    right: 9px;
+    opacity: 0.35;
+    font-size: 11px;
+  }
+  thead th[data-key].sort-asc::after { content: "\2191"; opacity: 1; color: var(--gold); }
+  thead th[data-key].sort-desc::after { content: "\2193"; opacity: 1; color: var(--gold); }
+  tbody td {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fbf9f2; }
+  .name-cell .deceased { font-weight: 600; color: var(--heading); }
+  .name-cell .owner { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .chip {
+    display: inline-block;
+    background: var(--gold-light);
+    color: #6b4f0a;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 11.5px;
+    margin: 1px 3px 1px 0;
+    font-weight: 600;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .badge.confirmed { background: var(--confirmed-bg); color: var(--confirmed-ink); }
+  .badge.review { background: var(--review-bg); color: var(--review-ink); }
+  a.link {
+    color: var(--heading);
+    text-decoration: none;
+    font-size: 13px;
+    border-bottom: 1px solid var(--gold);
+    padding-bottom: 1px;
+  }
+  a.link:hover { color: var(--gold); }
+  .links-cell { display: flex; flex-direction: column; gap: 4px; }
+  .mailed-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mailed-cell input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    accent-color: var(--confirmed-ink);
+    cursor: pointer;
+  }
+  .mailed-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .mailed-label.yes { color: var(--confirmed-ink); }
+  .empty {
+    padding: 40px 22px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .letter-cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .badge.sent { background: var(--confirmed-bg); color: var(--confirmed-ink); }
+  .badge.failed { background: #fbe4e4; color: #a13a3a; }
+  .badge.not-sent { background: var(--review-bg); color: var(--review-ink); }
+  button.send-letter-btn {
+    border: 1px solid var(--gold);
+    background: transparent;
+    color: var(--heading);
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.send-letter-btn:hover { background: var(--gold-light); }
+
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20,24,31,0.55);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal-card {
+    background: var(--card);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+  .modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-head h3 { margin: 0; font-family: Georgia, serif; color: var(--heading); }
+  .modal-close {
+    border: none;
+    background: none;
+    font-size: 22px;
+    line-height: 1;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .modal-body {
+    padding: 18px 22px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .modal-body label { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 8px; }
+  .modal-body select, .modal-body textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13.5px;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: inherit;
+    resize: vertical;
+  }
+  .letter-warning {
+    display: none;
+    font-size: 12.5px;
+    color: #a13a3a;
+    background: #fbe4e4;
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .letter-warning.show { display: block; }
+  .letter-result {
+    display: none;
+    font-size: 12.5px;
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .letter-result.show.ok { display: block; background: var(--confirmed-bg); color: var(--confirmed-ink); }
+  .letter-result.show.error { display: block; background: #fbe4e4; color: #a13a3a; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 22px;
+    border-top: 1px solid var(--border);
+  }
+  button.primary {
+    border: none;
+    background: var(--navy);
+    color: #fff;
+    padding: 9px 18px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary:hover { background: var(--navy-light); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .bulk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 4px;
+  }
+  .bulk-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .bulk-row .name { flex: 1; }
+  .bulk-row .addr { color: var(--muted); font-size: 12px; }
+  .bulk-row .status { font-size: 11.5px; color: var(--muted); min-width: 90px; text-align: right; }
+  .bulk-row.sending .status { color: var(--gold); }
+  .bulk-row.ok .status { color: var(--confirmed-ink); }
+  .bulk-row.err .status { color: #a13a3a; }
+  .bulk-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  footer {
+    max-width: 1180px;
+    margin: 0 auto 40px;
+    padding: 0 32px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --cream: #14181f;
+      --card: #1c212b;
+      --ink: #e7e9ee;
+      --muted: #93a0b4;
+      --border: #2a3140;
+      --heading: #dbe2ee;
+      --confirmed-bg: #17281c;
+      --confirmed-ink: #7bc98a;
+      --review-bg: #2b220f;
+      --review-ink: #e0b563;
+    }
+    thead th { background: #191e27; }
+    tbody tr:hover { background: #202634; }
+    .search-box input { background: #14181f; color: var(--ink); }
+    button.ghost { background: #14181f; }
+    button.ghost:hover { background: #232a38; }
+  }
+
+  @media print {
+    header.top { background: var(--navy) !important; -webkit-print-color-adjust: exact; }
+    .controls { display: none; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 720px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    thead { display: none; }
+    tbody td { display: block; padding: 6px 18px; border-bottom: none; }
+    tbody tr { border-bottom: 1px solid var(--border); padding: 10px 0; display: block; }
+  }
+
+  .login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    padding: 24px;
+  }
+  .login-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 36px 34px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+  }
+  .login-card .mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, var(--gold-light), var(--gold) 70%);
+    margin: 0 auto 16px;
+  }
+  .login-card h1 {
+    margin: 0 0 4px;
+    font-family: Georgia, serif;
+    font-size: 21px;
+    color: var(--heading, var(--navy));
+    text-align: center;
+  }
+  .login-card p.sub {
+    margin: 0 0 24px;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .login-card label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  .login-card input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--cream);
+    color: var(--ink);
+  }
+  .login-card button {
+    width: 100%;
+    margin-top: 22px;
+    padding: 11px;
+    border: none;
+    border-radius: 999px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .login-card button:hover { background: var(--navy-light); }
+  .login-error {
+    display: none;
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: #b3261e;
+    text-align: center;
+  }
+  .login-error.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="login-screen">
+  <form class="login-card" id="login-form">
+    <div class="mark"></div>
+    <h1>Probate Property Leads</h1>
+    <p class="sub">Sign in to view today&rsquo;s report</p>
+    <label for="login-email">Email</label>
+    <input type="email" id="login-email" autocomplete="username" required>
+    <label for="login-password">Password</label>
+    <input type="password" id="login-password" autocomplete="current-password" required>
+    <button type="submit">Sign In</button>
+    <div class="login-error" id="login-error">Incorrect email or password.</div>
+  </form>
+</div>
+
+<div id="app-content" style="display:none;">
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <h1>Probate Property Leads</h1>
+        <p>Salt Lake County &middot; deceased-owner match report</p>
+      </div>
+    </div>
+    <div class="generated">Generated July 27, 2026 at 9:45 AM</div>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>PDF Letter Templates</h2>
+        <div class="sub">Upload a company&rsquo;s pre-designed letter PDF to send as-is via Lob</div>
+      </div>
+    </div>
+    <form id="pdf-upload-form" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; padding:18px 22px; border-bottom:1px solid var(--border);">
+      <div style="flex:1; min-width:160px;">
+        <label for="pdf-company-name" style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Company Name</label>
+        <input type="text" id="pdf-company-name" required style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--cream); color:var(--ink); font-size:13.5px;">
+      </div>
+      <div style="flex:1; min-width:160px;">
+        <label for="pdf-template-name" style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Template Name</label>
+        <input type="text" id="pdf-template-name" required style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--cream); color:var(--ink); font-size:13.5px;">
+      </div>
+      <div>
+        <label for="pdf-file-input" style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">PDF File</label>
+        <input type="file" id="pdf-file-input" accept="application/pdf" required>
+      </div>
+      <button type="submit" class="ghost">Upload</button>
+      <div class="letter-result" id="pdf-upload-result" style="flex-basis:100%;"></div>
+    </form>
+    <table>
+      <thead>
+        <tr><th>Company</th><th>Template</th><th>Uploaded</th><th>Preview</th><th>Name Placement</th><th></th></tr>
+      </thead>
+      <tbody id="pdf-templates-body"></tbody>
+    </table>
+    <div class="empty" id="pdf-templates-empty" style="display:none;">No PDF templates uploaded yet.</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card confirmed">
+      <div class="num">12</div>
+      <div class="label">Real Leads Generated</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">83%</div>
+      <div class="label">Lead Pursued Rate</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Confirmed Leads</h2>
+        <div class="sub">Property owner name corroborated by the deceased&rsquo;s obituary</div>
+      </div>
+      <div class="controls">
+        <div class="search-box"><input id="search-confirmed" type="text" placeholder="Search name, owner, parcel&hellip;"></div>
+        <button class="ghost" id="bulk-send-open">Send This Week&rsquo;s Letters</button>
+        <button class="ghost" id="export-confirmed">Export CSV</button>
+        <button class="ghost" onclick="window.print()">Print</button>
+      </div>
+    </div>
+    <table id="confirmed-table">
+      <thead>
+        <tr>
+          <th data-key="fullName">Deceased / Owner Record</th>
+          <th data-key="parcelId">Parcel</th>
+          <th data-key="address">Address</th>
+          <th data-key="city">City</th>
+          <th data-key="state">State</th>
+          <th data-key="zip">Zip</th>
+          <th data-key="propertyValue">Property Value</th>
+          <th data-key="dateAdded">Date Added</th>
+          <th data-key="letterStatus">Letter</th>
+          <th data-key="mailedIn">Mailed In</th>
+          <th data-key="dateMailedIn">Date Mailed In</th>
+        </tr>
+      </thead>
+      <tbody id="confirmed-body"></tbody>
+    </table>
+    <div class="empty" id="confirmed-empty" style="display:none;">No confirmed leads yet &mdash; run the pipeline to populate this list.</div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="letter-modal-backdrop">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="letter-modal-title">Send Letter</h3>
+      <button type="button" class="modal-close" id="letter-modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label for="letter-template-select">Template</label>
+      <select id="letter-template-select"></select>
+
+      <label for="letter-message">Message</label>
+      <textarea id="letter-message" rows="12"></textarea>
+
+      <div class="letter-warning" id="letter-address-warning">
+        This lead is missing City or Zip &mdash; the address is incomplete and can&rsquo;t be mailed until that&rsquo;s filled in.
+      </div>
+      <div class="letter-result" id="letter-result"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="ghost" id="letter-cancel">Cancel</button>
+      <button type="button" class="primary" id="letter-send">Send Letter (Test Mode)</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="bulk-modal-backdrop">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Send This Week&rsquo;s Letters</h3>
+      <button type="button" class="modal-close" id="bulk-modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label for="bulk-template-select">Template (applied to every letter below, merged per lead)</label>
+      <select id="bulk-template-select"></select>
+
+      <label>Leads added in the last 7 days without a letter on record</label>
+      <div class="bulk-list" id="bulk-list"></div>
+
+      <div class="letter-result" id="bulk-result"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="ghost" id="bulk-cancel">Cancel</button>
+      <button type="button" class="primary" id="bulk-send" disabled>Send Letters (Test Mode)</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="placement-modal-backdrop">
+  <div class="modal-card" style="max-width:640px;">
+    <div class="modal-head">
+      <h3>Place Recipient Name</h3>
+      <button type="button" class="modal-close" id="placement-modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0; font-size:12.5px; color:var(--muted);">Click on the letter where the recipient&rsquo;s name should be stamped when this template is sent. Skip to send this template as-is, unpersonalized, for every recipient.</p>
+      <div id="placement-preview-wrap" style="position:relative; border:1px solid var(--border); border-radius:8px; overflow:hidden; cursor:crosshair; line-height:0;">
+        <img id="placement-preview-img" style="display:block; width:100%; height:auto;" alt="Letter preview">
+        <div id="placement-marker" style="display:none; position:absolute; width:10px; height:10px; margin:-5px 0 0 -5px; border-radius:50%; background:var(--gold); border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.35);"></div>
+      </div>
+      <div class="letter-result" id="placement-result"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="ghost" id="placement-skip">Skip (send as static PDF)</button>
+      <button type="button" class="primary" id="placement-save" disabled>Save Position</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Generated locally from pipeline_cache.db &middot; parcel and obituary links open the original source for verification before contacting anyone.
+</footer>
+
+<script id="lead-data" type="application/json">{"confirmed": [{"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH S & MARY V; JT", "parcelId": "22-19-326-006-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=22193260060000", "confirmed": true, "matchedKeywords": ["initial S matches deceased's own name 'Sanchez'"], "obituaryUrl": "https://www.legacy.com/person/joseph-a.-sanchez-jr.-61876405", "propertyValue": "$ 509,000", "address": "201 E 6715 S", "city": "MIDVALE", "state": "UT", "zip": "84047", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_3024fb49887ad169", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_3024fb49887ad169.pdf?version=v1&expires=1787506699&signature=tkco-GgwXn1WwEmNBIR5Mg1BvxMOqVUya7L4HdVaRLhmj57gPMaPvMwum7qPaNsB7mXYk4a6t5FxOOreW7WmCw", "testMode": true, "error": "", "sentAt": "2026-07-24 11:38:19"}}, {"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH A; TR (JAS REV LIV TR)", "parcelId": "21-36-332-003-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=21363320030000", "confirmed": true, "matchedKeywords": ["initial A matches deceased's own name 'A.'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/joseph-sanchez-obituary?id=61971430", "propertyValue": "$ 334,100", "address": "393 W PRINCETON DR", "city": "MIDVALE", "state": "UT", "zip": "84047", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_bd9170b40642121c", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_bd9170b40642121c.pdf?version=v1&expires=1787506975&signature=eyCo70hqVnkYZzBMwyVEO5twVv4NtwnHEKz4_yJH2XgmeS2gVNWOYPrLR0BnGrdHMrqqjOzne_Ex-VYgUIRrAw", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:55"}}, {"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH S & JACQUELYN E; JT", "parcelId": "14-27-430-004-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=14274300040000", "confirmed": true, "matchedKeywords": ["initial S matches deceased's own name 'Sanchez'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/joseph-sanchez-obituary?id=61971430", "propertyValue": "$ 550,500", "address": "3174 S TUSCANY DOWNS WY", "city": "WEST VALLEY CITY", "state": "UT", "zip": "84128", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_1da6aab200e0c19c", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_1da6aab200e0c19c.pdf?version=v1&expires=1787506975&signature=5HaasMpcQTnyzw00SGMYmsJf6C3DXXJIgg893PO4jKkfhwMWerx39D50Hwi3k8Pq_I0_LY946R4ZtXGjAFS5DQ", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:55"}}, {"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH A", "parcelId": "21-27-454-003-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=21274540030000", "confirmed": true, "matchedKeywords": ["initial A matches deceased's own name 'A.'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/joseph-sanchez-obituary?id=61971430", "propertyValue": "$ 357,300", "address": "7639 S SUNRISEPLACE WEST", "city": "WEST JORDAN", "state": "UT", "zip": "84084", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_36d9835c3f34b964", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_36d9835c3f34b964.pdf?version=v1&expires=1787506976&signature=aJ1IU5gNlEPXXDMh9bNveUkHqrrfxEuj1eEIR7DkCPFQAp--SSOnRcYb0y2uv48F74f7AAU00xs0tlIz51Q7Dg", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:56"}}, {"fullName": "Jack Frost", "ownerName": "FROST, JACK E & LORETTA O; TRS", "parcelId": "16-22-326-011-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=16223260110000", "confirmed": true, "matchedKeywords": ["loretta"], "obituaryUrl": "https://www.legacy.com/us/obituaries/messenger/name/jack-frost-obituary?id=61937715", "propertyValue": "$ 1,279,800", "address": "2171 E PARLEYS TER", "city": "SALT LAKE CITY", "state": "UT", "zip": "84109", "dateAdded": "Jul 20, 2026", "dateAddedRaw": "2026-07-20", "sourceFile": "2026-07-20.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_76817ca9902b8685", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_76817ca9902b8685.pdf?version=v1&expires=1787506976&signature=7rb-DbRMQEHQ9-PF0hWpitotuMReThbzw_3p8_7DgF2QmF9zQfPx3czRSeBZLNCF-P4b6cmSbOPABc0CKit_CA", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:56"}}, {"fullName": "John Wells Knowlton Jr.", "ownerName": "KNOWLTON, JOHN W, III & LENNIE N; JT", "parcelId": "16-28-203-002-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=16282030020000", "confirmed": true, "matchedKeywords": ["initial W matches deceased's own name 'Wells'"], "obituaryUrl": "https://www.legacy.com/person/John-Wells-Knowlton-Jr.-61888014", "propertyValue": "$ 846,100", "address": "2825 S IMPERIAL ST", "city": "SALT LAKE CITY", "state": "UT", "zip": "84106", "dateAdded": "Jul 21, 2026", "dateAddedRaw": "2026-07-21", "sourceFile": "2026-07-21.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_6d360ff061f4a337", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_6d360ff061f4a337.pdf?version=v1&expires=1787506977&signature=TWAzHhDZp6WCVmYSD2-_tpuhKpK_XdDM5jYBTmayCl-Yg3mRIhg_jkHFIaetm1Qlu9gAkmn7iAj-Jjm-_EfPDA", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:57"}}, {"fullName": "Jacob Gregory Banyai", "ownerName": "BANYAI, JACOB G; TR (JGB LV TR)", "parcelId": "22-27-228-011-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=22272280110000", "confirmed": true, "matchedKeywords": ["initial G matches deceased's own name 'Gregory'"], "obituaryUrl": "https://www.legacy.com/person/Jacob-Gregory-Banyai-61925216", "propertyValue": "$ 671,100", "address": "7041 S CATALINA DR", "city": "COTTONWOOD HEIGHTS", "state": "UT", "zip": "84121", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_41c413825984b4cb", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_41c413825984b4cb.pdf?version=v1&expires=1787506977&signature=_StaUZ_xlVVwprJt9LzWwQs7Y3XOJ2wDqvIAbnD7_24Nrjq3WR4l7toEhnoX7yIGxMsaxLda2e9m94DhoQjiCQ", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:57"}}, {"fullName": "Karen Jordan \"Casey\" Bauer", "ownerName": "BAUER, KAREN J; TR", "parcelId": "28-04-177-017-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=28041770170000", "confirmed": true, "matchedKeywords": ["initial J matches deceased's own name 'Jordan'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/karen-bauer-obituary?id=62025113", "propertyValue": "$ 711,400", "address": "1581 E ALTAIR CIR", "city": "SANDY", "state": "UT", "zip": "84093", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_fc3f824ab45b1ab1", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_fc3f824ab45b1ab1.pdf?version=v1&expires=1787506978&signature=lwSPESwGajvELLlllGsUQx6de954enTdmjCCVUqEOWFSBhAVyX-DHZa-QYQOB4VO3XZfWoEJuEAB6Y5k9ra_CQ", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:58"}}, {"fullName": "Joellen Pingree Dillard", "ownerName": "DILLARD, JOELLEN P; TR", "parcelId": "28-12-276-003-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=28122760030000", "confirmed": true, "matchedKeywords": ["initial P matches deceased's own name 'Pingree'"], "obituaryUrl": "", "propertyValue": "$ 2,489,890", "address": "4261 LITTLE COTTONWOOD RD", "city": "UNINCORPORATED", "state": "UT", "zip": "84092", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_44dfb62a3cc76ae7", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_44dfb62a3cc76ae7.pdf?version=v1&expires=1787506979&signature=aEgQcQBbkXnSFbd7XlXUBgY-_-9JD-IwPKd0BqCdceIThWx1zXSWEGmPKlYrT8f4147P7mXpDL7SUivu6OK1Dw", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:59"}}, {"fullName": "Marilynn Joy Marriott (Tingey)", "ownerName": "MARRIOTT, DAVID D & MARILYNN T; TRS (D&M", "parcelId": "16-10-351-007-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=16103510070000", "confirmed": true, "matchedKeywords": ["david"], "obituaryUrl": "https://www.legacy.com/us/obituaries/deseretnews/name/marilynn-marriott-obituary?id=62029864", "propertyValue": "$ 1,453,400", "address": "2024 E PRINCETON DR", "city": "SALT LAKE CITY", "state": "UT", "zip": "84108", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_ef6bb6c15c2c6345", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_ef6bb6c15c2c6345.pdf?version=v1&expires=1787506979&signature=Jm8RFstTVLeswd2q720Iw6nH0tRnMX0opR1WqJqOFyJyy2rEAQAlCGRPqxO4u4ihfkZNNZUOzVXfarBYhhidDg", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:59"}}, {"fullName": "Debra \"Debbie\" Sanich", "ownerName": "SANICH, DEBRA; JT SANICH, LARRY; JT", "parcelId": "28-05-255-004-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=28052550040000", "confirmed": true, "matchedKeywords": ["larry"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/debra-sanich-obituary?id=61961920", "propertyValue": "$ 482,500", "address": "8947 S HEIGHTS DR", "city": "SANDY", "state": "UT", "zip": "84094.0", "dateAdded": "Jul 22, 2026", "dateAddedRaw": "2026-07-22", "sourceFile": "2026-07-22.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "", "status": "failed", "expectedDeliveryDate": "", "previewUrl": "", "testMode": true, "error": "address_zip is not a valid ZIP code", "sentAt": "2026-07-24 11:42:59"}}, {"fullName": "Geraldine White", "ownerName": "WHITE, LESLIE & GERALDINE; JT", "parcelId": "22-08-157-010-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=22081570100000", "confirmed": true, "matchedKeywords": ["leslie"], "obituaryUrl": "https://www.legacy.com/us/obituaries/deseretnews/name/geraldine-white-obituary?id=62002736", "propertyValue": "$ 363,600", "address": "825 E THREE FTNS CIR # 9", "city": "", "state": "UT", "zip": "", "dateAdded": "Jul 22, 2026", "dateAddedRaw": "2026-07-22", "sourceFile": "2026-07-22.xlsx", "letter": null}], "templates": [{"id": "probate-inquiry", "name": "Probate Inquiry", "body": "Dear {{owner_name}},\n\nI'm reaching out regarding the property at {{address}}, {{city}}, {{state}} {{zip}}, which I understand may be part of an estate following the passing of {{full_name}}. Please accept my condolences.\n\nIf you are the person handling this property, I'd like to discuss options that might make this process easier for you, including a straightforward cash purchase with no repairs or listing required.\n\nFeel free to reach out whenever is convenient - there's no obligation.\n\nSincerely,"}, {"id": "cash-offer", "name": "Cash Offer", "body": "Dear {{owner_name}},\n\nI'm interested in purchasing the property at {{address}}, {{city}}, {{state}} {{zip}} for cash, as-is, on a timeline that works for you.\n\nNo repairs, no showings, no realtor commissions - just a simple, fast closing if it's something you'd consider.\n\nI'd welcome the chance to talk whenever you're ready.\n\nSincerely,"}], "pdfTemplates": [{"id": "pdf:2", "rawId": 2, "name": "Sample.. \u2014 Sample PDF", "company": "Sample..", "templateName": "Sample PDF", "filename": "6ab99c6a1561420ea10ee3cc22c698e4.pdf", "fieldPositions": {}, "uploadedAt": "2026-07-24 14:17:33"}]}</script>
+<script>
+  const leadData = JSON.parse(document.getElementById('lead-data').textContent);
+  const confirmed = leadData.confirmed;
+  const templates = leadData.templates;
+  const pdfTemplates = leadData.pdfTemplates || [];
+
+  // Looks up a template by id across both the built-in merge-field
+  // templates and company-uploaded PDF templates, tagging which kind it is
+  // so callers (send handlers, the message box) can branch on it.
+  function findTemplate(id) {
+    const t = templates.find(x => x.id === id);
+    if (t) return Object.assign({ isPdf: false }, t);
+    const p = pdfTemplates.find(x => x.id === id);
+    if (p) return Object.assign({ isPdf: true }, p);
+    return null;
+  }
+
+  function populateTemplateSelect(selectEl) {
+    selectEl.innerHTML = '';
+    if (templates.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Message Templates';
+      templates.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+    if (pdfTemplates.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'Company PDF Designs';
+      pdfTemplates.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        grp.appendChild(opt);
+      });
+      selectEl.appendChild(grp);
+    }
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function linkEl(href, label) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = 'link';
+    a.textContent = label;
+    return a;
+  }
+
+  // "Mailed In" tracking has nowhere server-side to live (this is a static
+  // file with no backend), so it's stored in this browser's localStorage,
+  // keyed by parcel id (falling back to name+owner for leads with no
+  // parcel). It survives reloads and future regenerations of this report,
+  // but only in this browser - it won't follow the file elsewhere.
+  const MAILED_KEY_PREFIX = 'probateLeadsMailed:';
+
+  function mailedKey(lead) {
+    return MAILED_KEY_PREFIX + (lead.parcelId || `${lead.fullName}|${lead.ownerName}`);
+  }
+
+  function getMailedState(lead) {
+    try {
+      const raw = localStorage.getItem(mailedKey(lead));
+      if (!raw) return { mailed: false, date: '' };
+      return JSON.parse(raw);
+    } catch (e) {
+      return { mailed: false, date: '' };
+    }
+  }
+
+  function setMailedState(lead, mailed) {
+    const now = Date.now();
+    const date = mailed
+      ? new Date(now).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+      : '';
+    localStorage.setItem(mailedKey(lead), JSON.stringify({ mailed, date, timestamp: mailed ? now : 0 }));
+    return date;
+  }
+
+  const MERGE_FIELD_MAP = {
+    full_name: 'fullName', owner_name: 'ownerName', address: 'address',
+    city: 'city', state: 'state', zip: 'zip',
+  };
+
+  function mergeTemplate(body, lead) {
+    return body.replace(/\{\{(\w+)\}\}/g, (match, field) => {
+      const leadKey = MERGE_FIELD_MAP[field];
+      return leadKey ? (lead[leadKey] || '') : match;
+    });
+  }
+
+  function hasCompleteAddress(lead) {
+    return Boolean(lead.address && lead.city && lead.state && lead.zip);
+  }
+
+  function letterStatusLabel(lead) {
+    if (!lead.letter) return 'not-sent';
+    return lead.letter.status === 'sent' ? 'sent' : 'failed';
+  }
+
+  function letterCell(lead) {
+    const td = el('td', 'letter-cell');
+    const label = letterStatusLabel(lead);
+    const badgeText = label === 'sent' ? 'Sent' : label === 'failed' ? 'Failed' : 'Not Sent';
+    const badge = el('span', `badge ${label}`, badgeText);
+    td.appendChild(badge);
+    if (lead.letter && lead.letter.sentAt) {
+      td.appendChild(el('span', 'owner', lead.letter.sentAt));
+    }
+    const btn = el('button', 'send-letter-btn', lead.letter ? 'Resend Letter' : 'Send Letter');
+    btn.type = 'button';
+    btn.addEventListener('click', () => openLetterModal(lead));
+    td.appendChild(btn);
+    return td;
+  }
+
+  // --- Send Letter modal ---
+  let activeLead = null;
+  const modalBackdrop = document.getElementById('letter-modal-backdrop');
+  const templateSelect = document.getElementById('letter-template-select');
+  const messageBox = document.getElementById('letter-message');
+  const addressWarning = document.getElementById('letter-address-warning');
+  const letterResult = document.getElementById('letter-result');
+  const sendBtn = document.getElementById('letter-send');
+
+  populateTemplateSelect(templateSelect);
+
+  function fillMessageFromTemplate() {
+    const template = findTemplate(templateSelect.value);
+    if (!template) return;
+    if (template.isPdf) {
+      messageBox.value = '';
+      messageBox.disabled = true;
+      messageBox.placeholder = "This template sends the company's uploaded PDF design as-is - nothing to edit here.";
+    } else {
+      messageBox.disabled = false;
+      if (activeLead) messageBox.value = mergeTemplate(template.body, activeLead);
+    }
+  }
+
+  function openLetterModal(lead) {
+    activeLead = lead;
+    letterResult.classList.remove('show', 'ok', 'error');
+    letterResult.textContent = '';
+    templateSelect.value = templates.length ? templates[0].id : pdfTemplates[0].id;
+    fillMessageFromTemplate();
+    const complete = hasCompleteAddress(lead);
+    addressWarning.classList.toggle('show', !complete);
+    sendBtn.disabled = !complete;
+    modalBackdrop.classList.add('open');
+  }
+
+  function closeLetterModal() {
+    modalBackdrop.classList.remove('open');
+    activeLead = null;
+  }
+
+  templateSelect.addEventListener('change', fillMessageFromTemplate);
+  document.getElementById('letter-modal-close').addEventListener('click', closeLetterModal);
+  document.getElementById('letter-cancel').addEventListener('click', closeLetterModal);
+  modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeLetterModal();
+  });
+
+  // Shared by the single-lead modal and the bulk-send modal. Posts one
+  // letter and, on success, stamps lead.letter so both modals' callers can
+  // just re-render from the lead objects afterward.
+  async function sendLetterForLead(lead, templateId, message) {
+    const response = await fetch('/api/send-letter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: lead.fullName,
+        ownerName: lead.ownerName,
+        parcelId: lead.parcelId,
+        address: lead.address,
+        city: lead.city,
+        state: lead.state,
+        zip: lead.zip,
+        templateId,
+        message,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to send letter.');
+    }
+    lead.letter = {
+      status: 'sent',
+      lobLetterId: data.lobLetterId,
+      expectedDeliveryDate: data.expectedDeliveryDate,
+      testMode: data.testMode,
+      sentAt: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+    };
+    return data;
+  }
+
+  sendBtn.addEventListener('click', async () => {
+    if (!activeLead || !hasCompleteAddress(activeLead)) return;
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending…';
+    letterResult.classList.remove('show', 'ok', 'error');
+
+    try {
+      const data = await sendLetterForLead(activeLead, templateSelect.value, messageBox.value);
+      letterResult.classList.add('show', 'ok');
+      letterResult.textContent = data.testMode
+        ? `Sent in Lob test mode (no real letter mailed). Expected delivery: ${data.expectedDeliveryDate || 'n/a'}.`
+        : `Sent. Expected delivery: ${data.expectedDeliveryDate || 'n/a'}.`;
+      repaintConfirmed();
+      setTimeout(closeLetterModal, 1400);
+    } catch (err) {
+      letterResult.classList.add('show', 'error');
+      letterResult.textContent = err.message;
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send Letter (Test Mode)';
+    }
+  });
+
+  // --- Bulk "Send This Week's Letters" modal ---
+  const bulkBackdrop = document.getElementById('bulk-modal-backdrop');
+  const bulkTemplateSelect = document.getElementById('bulk-template-select');
+  const bulkList = document.getElementById('bulk-list');
+  const bulkResult = document.getElementById('bulk-result');
+  const bulkSendBtn = document.getElementById('bulk-send');
+
+  populateTemplateSelect(bulkTemplateSelect);
+
+  function isWithinLastNDays(dateAddedRaw, days) {
+    if (!dateAddedRaw) return false;
+    const then = new Date(dateAddedRaw + 'T00:00:00');
+    if (isNaN(then)) return false;
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - days);
+    return then >= cutoff;
+  }
+
+  function bulkEligibleLeads() {
+    return confirmed.filter(l =>
+      isWithinLastNDays(l.dateAddedRaw, 7) &&
+      hasCompleteAddress(l) &&
+      letterStatusLabel(l) !== 'sent'
+    );
+  }
+
+  let bulkSelection = new Map(); // lead -> checkbox element
+
+  function renderBulkList() {
+    bulkList.innerHTML = '';
+    bulkSelection = new Map();
+    const eligible = bulkEligibleLeads();
+    if (!eligible.length) {
+      bulkList.appendChild(el('div', 'bulk-empty', 'No leads from the last 7 days are waiting on a letter.'));
+      bulkSendBtn.disabled = true;
+      return;
+    }
+    eligible.forEach(lead => {
+      const row = el('div', 'bulk-row');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      checkbox.addEventListener('change', updateBulkSendState);
+      row.appendChild(checkbox);
+      row.appendChild(el('span', 'name', lead.fullName));
+      row.appendChild(el('span', 'addr', `${lead.address}, ${lead.city} ${lead.zip}`));
+      row.appendChild(el('span', 'status', ''));
+      bulkList.appendChild(row);
+      bulkSelection.set(lead, row);
+    });
+    updateBulkSendState();
+  }
+
+  function updateBulkSendState() {
+    const anyChecked = Array.from(bulkSelection.values()).some(row => row.querySelector('input').checked);
+    bulkSendBtn.disabled = !anyChecked;
+  }
+
+  function openBulkModal() {
+    bulkResult.classList.remove('show', 'ok', 'error');
+    bulkResult.textContent = '';
+    bulkTemplateSelect.value = templates.length ? templates[0].id : pdfTemplates[0].id;
+    renderBulkList();
+    bulkBackdrop.classList.add('open');
+  }
+
+  function closeBulkModal() {
+    bulkBackdrop.classList.remove('open');
+  }
+
+  document.getElementById('bulk-send-open').addEventListener('click', openBulkModal);
+  document.getElementById('bulk-modal-close').addEventListener('click', closeBulkModal);
+  document.getElementById('bulk-cancel').addEventListener('click', closeBulkModal);
+  bulkBackdrop.addEventListener('click', (e) => {
+    if (e.target === bulkBackdrop) closeBulkModal();
+  });
+
+  bulkSendBtn.addEventListener('click', async () => {
+    const template = findTemplate(bulkTemplateSelect.value);
+    if (!template) return;
+    const jobs = Array.from(bulkSelection.entries()).filter(([, row]) => row.querySelector('input').checked);
+    if (!jobs.length) return;
+
+    bulkSendBtn.disabled = true;
+    bulkTemplateSelect.disabled = true;
+    bulkResult.classList.remove('show', 'ok', 'error');
+    let sentCount = 0;
+    const failures = [];
+
+    for (const [lead, row] of jobs) {
+      row.classList.add('sending');
+      row.querySelector('.status').textContent = 'Sending…';
+      try {
+        await sendLetterForLead(lead, template.id, template.isPdf ? '' : mergeTemplate(template.body, lead));
+        row.classList.remove('sending');
+        row.classList.add('ok');
+        row.querySelector('.status').textContent = 'Sent';
+        sentCount += 1;
+      } catch (err) {
+        row.classList.remove('sending');
+        row.classList.add('err');
+        row.querySelector('.status').textContent = 'Failed';
+        failures.push(`${lead.fullName}: ${err.message}`);
+      }
+    }
+
+    bulkResult.classList.add('show', failures.length ? 'error' : 'ok');
+    bulkResult.textContent = failures.length
+      ? `Sent ${sentCount}, failed ${failures.length}. ${failures.join(' | ')}`
+      : `Sent all ${sentCount} letters (Lob test mode).`;
+    repaintConfirmed();
+    bulkTemplateSelect.disabled = false;
+    updateBulkSendState();
+  });
+
+  function renderRow(lead) {
+    const tr = document.createElement('tr');
+
+    const nameCell = el('td', 'name-cell');
+    nameCell.appendChild(el('div', 'deceased', lead.fullName));
+    nameCell.appendChild(el('div', 'owner', lead.ownerName));
+    tr.appendChild(nameCell);
+
+    const parcelCell = el('td');
+    if (lead.assessorUrl) {
+      parcelCell.appendChild(linkEl(lead.assessorUrl, lead.parcelId || 'View parcel'));
+    } else {
+      parcelCell.appendChild(el('span', null, lead.parcelId || '—'));
+    }
+    tr.appendChild(parcelCell);
+
+    tr.appendChild(el('td', null, lead.address || '—'));
+    tr.appendChild(el('td', null, lead.city || '—'));
+    tr.appendChild(el('td', null, lead.state || '—'));
+    tr.appendChild(el('td', null, lead.zip || '—'));
+    tr.appendChild(el('td', null, lead.propertyValue || '—'));
+    tr.appendChild(el('td', null, lead.dateAdded || '—'));
+
+    tr.appendChild(letterCell(lead));
+
+    const mailedState = getMailedState(lead);
+    const mailedCell = el('td', 'mailed-cell');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = mailedState.mailed;
+    const mailedLabel = el('span', 'mailed-label' + (mailedState.mailed ? ' yes' : ''), mailedState.mailed ? 'Yes' : 'No');
+    const dateMailedCell = el('td', null, mailedState.date || '—');
+
+    checkbox.addEventListener('change', () => {
+      const newDate = setMailedState(lead, checkbox.checked);
+      mailedLabel.textContent = checkbox.checked ? 'Yes' : 'No';
+      mailedLabel.className = 'mailed-label' + (checkbox.checked ? ' yes' : '');
+      dateMailedCell.textContent = newDate || '—';
+    });
+
+    mailedCell.appendChild(checkbox);
+    mailedCell.appendChild(mailedLabel);
+    tr.appendChild(mailedCell);
+    tr.appendChild(dateMailedCell);
+
+    return tr;
+  }
+
+  function paint(list, bodyId, emptyId) {
+    const body = document.getElementById(bodyId);
+    const empty = document.getElementById(emptyId);
+    body.innerHTML = '';
+    if (!list.length) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    list.forEach(l => body.appendChild(renderRow(l)));
+  }
+
+  function matches(lead, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return lead.fullName.toLowerCase().includes(q) ||
+           lead.ownerName.toLowerCase().includes(q) ||
+           lead.parcelId.toLowerCase().includes(q) ||
+           lead.address.toLowerCase().includes(q) ||
+           lead.city.toLowerCase().includes(q) ||
+           lead.zip.toLowerCase().includes(q);
+  }
+
+  // Column sorting. Most columns sort on a plain lead field, but "Mailed In"
+  // and "Date Mailed In" live in localStorage rather than the lead object,
+  // so they're computed fresh at sort time.
+  function sortValue(lead, key) {
+    switch (key) {
+      case 'mailedIn':
+        return getMailedState(lead).mailed ? 1 : 0;
+      case 'dateMailedIn':
+        return getMailedState(lead).timestamp || 0;
+      case 'dateAdded':
+        return lead.dateAddedRaw || '';
+      case 'letterStatus':
+        return letterStatusLabel(lead);
+      case 'propertyValue': {
+        const num = parseFloat((lead.propertyValue || '').replace(/[^0-9.]/g, ''));
+        return isNaN(num) ? -1 : num;
+      }
+      default:
+        return (lead[key] || '').toString().toLowerCase();
+    }
+  }
+
+  const confirmedState = { query: '', sortKey: null, sortDir: 'asc' };
+
+  function applyState(list, state) {
+    let result = state.query ? list.filter(l => matches(l, state.query)) : list.slice();
+    if (state.sortKey) {
+      result.sort((a, b) => {
+        const va = sortValue(a, state.sortKey);
+        const vb = sortValue(b, state.sortKey);
+        if (va < vb) return state.sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return state.sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }
+
+  function updateSortIndicators(tableId, state) {
+    document.querySelectorAll(`#${tableId} thead th[data-key]`).forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.key === state.sortKey) {
+        th.classList.add(state.sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
+  function repaintConfirmed() {
+    paint(applyState(confirmed, confirmedState), 'confirmed-body', 'confirmed-empty');
+    updateSortIndicators('confirmed-table', confirmedState);
+  }
+
+  function setupSortableHeaders(tableId, state, repaintFn) {
+    document.querySelectorAll(`#${tableId} thead th[data-key]`).forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.key;
+        if (state.sortKey === key) {
+          state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          state.sortKey = key;
+          state.sortDir = 'asc';
+        }
+        repaintFn();
+      });
+    });
+  }
+
+  setupSortableHeaders('confirmed-table', confirmedState, repaintConfirmed);
+
+  repaintConfirmed();
+
+  document.getElementById('search-confirmed').addEventListener('input', e => {
+    confirmedState.query = e.target.value;
+    repaintConfirmed();
+  });
+
+  document.getElementById('export-confirmed').addEventListener('click', () => {
+    const rows = [['Deceased', 'Owner Record', 'Parcel ID', 'Address', 'City', 'State', 'Zip', 'Property Value', 'Matched Keywords', 'Obituary URL', 'Assessor URL', 'Date Added', 'Letter Status', 'Letter Sent At', 'Mailed In', 'Date Mailed In']];
+    confirmed.forEach(l => {
+      const mailedState = getMailedState(l);
+      rows.push([
+        l.fullName, l.ownerName, l.parcelId, l.address, l.city, l.state, l.zip, l.propertyValue, l.matchedKeywords.join('; '), l.obituaryUrl, l.assessorUrl, l.dateAdded,
+        letterStatusLabel(l), (l.letter && l.letter.sentAt) || '',
+        mailedState.mailed ? 'Yes' : 'No', mailedState.date
+      ]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'confirmed_leads.csv';
+    a.click();
+  });
+
+  // --- PDF Templates admin panel ---
+  const pdfTemplatesBody = document.getElementById('pdf-templates-body');
+  const pdfTemplatesEmpty = document.getElementById('pdf-templates-empty');
+
+  function renderPdfTemplatesTable() {
+    pdfTemplatesBody.innerHTML = '';
+    if (!pdfTemplates.length) {
+      pdfTemplatesEmpty.style.display = 'block';
+      return;
+    }
+    pdfTemplatesEmpty.style.display = 'none';
+    pdfTemplates.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.appendChild(el('td', null, t.company));
+      tr.appendChild(el('td', null, t.templateName));
+      tr.appendChild(el('td', null, t.uploadedAt || '—'));
+      const previewTd = el('td');
+      previewTd.appendChild(linkEl(`/pdf-templates/${t.filename}`, 'Preview'));
+      tr.appendChild(previewTd);
+
+      const hasPosition = Boolean(t.fieldPositions && t.fieldPositions.owner_name);
+      const placedTd = el('td');
+      placedTd.appendChild(el('span', `badge ${hasPosition ? 'sent' : 'not-sent'}`, hasPosition ? 'Personalized' : 'Static'));
+      tr.appendChild(placedTd);
+
+      const actionTd = el('td');
+      const placeBtn = el('button', 'ghost', hasPosition ? 'Edit Placement' : 'Add Name Placement');
+      placeBtn.type = 'button';
+      placeBtn.style.marginRight = '6px';
+      placeBtn.addEventListener('click', () => openPlacementModal({ id: t.rawId, filename: t.filename }));
+      actionTd.appendChild(placeBtn);
+      const delBtn = el('button', 'ghost', 'Delete');
+      delBtn.type = 'button';
+      delBtn.addEventListener('click', () => deletePdfTemplate(t.rawId));
+      actionTd.appendChild(delBtn);
+      tr.appendChild(actionTd);
+      pdfTemplatesBody.appendChild(tr);
+    });
+  }
+  renderPdfTemplatesTable();
+
+  document.getElementById('pdf-upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const companyName = document.getElementById('pdf-company-name').value.trim();
+    const templateName = document.getElementById('pdf-template-name').value.trim();
+    const file = document.getElementById('pdf-file-input').files[0];
+    const resultEl = document.getElementById('pdf-upload-result');
+    resultEl.classList.remove('show', 'ok', 'error');
+    if (!companyName || !templateName || !file) return;
+
+    const formData = new FormData();
+    formData.append('companyName', companyName);
+    formData.append('templateName', templateName);
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('/api/upload-pdf-template', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Upload failed.');
+      openPlacementModal({ id: data.id, filename: data.filename });
+    } catch (err) {
+      resultEl.classList.add('show', 'error');
+      resultEl.textContent = err.message;
+    }
+  });
+
+  // --- Click-to-place: where the recipient's name gets stamped on a PDF template ---
+  const placementBackdrop = document.getElementById('placement-modal-backdrop');
+  const placementImg = document.getElementById('placement-preview-img');
+  const placementMarker = document.getElementById('placement-marker');
+  const placementWrap = document.getElementById('placement-preview-wrap');
+  const placementResult = document.getElementById('placement-result');
+  const placementSaveBtn = document.getElementById('placement-save');
+  const placementSkipBtn = document.getElementById('placement-skip');
+
+  let placementTemplate = null;
+  let placementRatio = null;
+
+  function openPlacementModal(template) {
+    placementTemplate = template;
+    placementRatio = null;
+    placementMarker.style.display = 'none';
+    placementSaveBtn.disabled = true;
+    placementSaveBtn.textContent = 'Save Position';
+    placementResult.classList.remove('show', 'ok', 'error');
+    placementResult.textContent = '';
+    placementImg.src = `/pdf-templates/${template.filename}/preview.png?t=${Date.now()}`;
+    placementBackdrop.classList.add('open');
+  }
+
+  function closePlacementModal() {
+    placementBackdrop.classList.remove('open');
+    placementTemplate = null;
+  }
+
+  placementWrap.addEventListener('click', (e) => {
+    const rect = placementImg.getBoundingClientRect();
+    const xRatio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    const yRatio = Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 1);
+    placementRatio = { x: xRatio, y: yRatio };
+    placementMarker.style.left = `${xRatio * 100}%`;
+    placementMarker.style.top = `${yRatio * 100}%`;
+    placementMarker.style.display = 'block';
+    placementSaveBtn.disabled = false;
+  });
+
+  placementSaveBtn.addEventListener('click', async () => {
+    if (!placementTemplate || !placementRatio) return;
+    placementSaveBtn.disabled = true;
+    placementSaveBtn.textContent = 'Saving…';
+    try {
+      const response = await fetch('/api/set-pdf-template-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: placementTemplate.id,
+          field: 'owner_name',
+          xRatio: placementRatio.x,
+          yRatio: placementRatio.y,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save position.');
+      window.location.reload();
+    } catch (err) {
+      placementResult.classList.add('show', 'error');
+      placementResult.textContent = err.message;
+      placementSaveBtn.disabled = false;
+      placementSaveBtn.textContent = 'Save Position';
+    }
+  });
+
+  placementSkipBtn.addEventListener('click', () => window.location.reload());
+  document.getElementById('placement-modal-close').addEventListener('click', closePlacementModal);
+  placementBackdrop.addEventListener('click', (e) => {
+    if (e.target === placementBackdrop) closePlacementModal();
+  });
+
+  async function deletePdfTemplate(id) {
+    if (!confirm('Delete this PDF template? This cannot be undone.')) return;
+    try {
+      const response = await fetch('/api/delete-pdf-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Delete failed.');
+      window.location.reload();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+</script>
+
+</div>
+
+<script>
+  // NOTE: this is a client-side gate on a static local file, not real
+  // access control - the credentials below are visible to anyone who views
+  // the page source. It just keeps the report from being open by default.
+  const VALID_EMAIL = "thomasjr@leads.extractor";
+  const VALID_PASSWORD = "239184";
+  const SESSION_KEY = "probateLeadsAuthed";
+
+  const loginScreen = document.getElementById('login-screen');
+  const appContent = document.getElementById('app-content');
+  const loginForm = document.getElementById('login-form');
+  const loginError = document.getElementById('login-error');
+
+  function unlock() {
+    loginScreen.style.display = 'none';
+    appContent.style.display = 'block';
+  }
+
+  if (sessionStorage.getItem(SESSION_KEY) === 'true') {
+    unlock();
+  }
+
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const password = document.getElementById('login-password').value;
+    if (email === VALID_EMAIL && password === VALID_PASSWORD) {
+      sessionStorage.setItem(SESSION_KEY, 'true');
+      loginError.classList.remove('show');
+      unlock();
+    } else {
+      loginError.classList.add('show');
+    }
+  });
+</script>
+
+</body>
+</html>
