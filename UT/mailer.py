@@ -76,12 +76,16 @@ def _run_request(request):
         raise LobAPIError(f"Couldn't reach Lob: {e.reason}") from e
 
 
-def send_letter(to_name, address_line1, city, state, zip_code, html_body, description=""):
+def send_letter(to_name, address_line1, city, state, zip_code, html_body, description="", from_address=None):
     """Creates a letter via POST /v1/letters. Returns Lob's response dict
     (includes 'id', 'expected_delivery_date', 'url' to a preview PDF) on
-    success. Raises LobAPIError with Lob's own error message on failure."""
+    success. Raises LobAPIError with Lob's own error message on failure.
+
+    from_address lets a caller send on behalf of a specific agent (their own
+    return address, looked up by dashboard.py); omitting it falls back to
+    the LOB_FROM_* env vars, unchanged from before multi-tenant support."""
     api_key = _require_env("LOB_API_KEY")
-    from_address = _from_address()
+    from_address = from_address or _from_address()
 
     payload = {
         "description": description or f"Letter to {to_name}",
@@ -133,12 +137,12 @@ def _encode_multipart(fields, file_field_name, filename, file_bytes, file_conten
     return b"\r\n".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
-def send_letter_pdf(to_name, address_line1, city, state, zip_code, pdf_bytes, description=""):
+def send_letter_pdf(to_name, address_line1, city, state, zip_code, pdf_bytes, description="", from_address=None):
     """Same as send_letter() but the letter content is an already-designed
     PDF (uploaded by an outside company) sent to Lob as-is, rather than HTML
-    generated from a merge-field message."""
+    generated from a merge-field message. See send_letter() for from_address."""
     api_key = _require_env("LOB_API_KEY")
-    from_address = _from_address()
+    from_address = from_address or _from_address()
 
     fields = {
         "description": description or f"Letter to {to_name}",

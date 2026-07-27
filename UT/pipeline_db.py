@@ -235,6 +235,34 @@ def update_subscription_status(stripe_subscription_id, status):
     ).execute()
 
 
+def get_mailing_profile(email):
+    """This agent's own return address for outgoing letters, or None if
+    they've never set one (e.g. the original admin account, which keeps
+    using mailer.py's LOB_FROM_* env var fallback instead)."""
+    if not email:
+        return None
+    result = (
+        _get_client()
+        .table("user_mailing_profile")
+        .select("*")
+        .eq("email", email.strip().lower())
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def set_mailing_profile(email, from_name, from_address1, from_address2, from_city, from_state, from_zip):
+    _get_client().table("user_mailing_profile").upsert({
+        "email": email.strip().lower(),
+        "from_name": from_name,
+        "from_address1": from_address1,
+        "from_address2": from_address2 or None,
+        "from_city": from_city,
+        "from_state": from_state,
+        "from_zip": from_zip,
+    }, on_conflict="email").execute()
+
+
 def get_latest_letters_sent():
     """Latest send attempt per (county, full_name, parcel_id), keyed the same
     way dashboard.py keys its merged, multi-county confirmed-leads list."""

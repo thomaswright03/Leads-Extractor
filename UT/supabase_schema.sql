@@ -76,3 +76,18 @@ create table if not exists subscriptions (
     status text not null,
     created_at timestamptz not null default now()
 );
+
+-- Added 2026-07-27 (public signup): each agent's own return address for
+-- outgoing letters, collected at signup. mailer.py falls back to the
+-- LOB_FROM_* env vars (the original Summit Sotheby's identity) when an
+-- email has no row here, so the original admin account is unaffected.
+create table if not exists user_mailing_profile (
+    id bigint generated always as identity primary key,
+    email text not null unique,
+    from_name text not null,
+    from_address1 text not null,
+    from_address2 text,
+    from_city text not null,
+    from_state text not null,
+    from_zip text not null
+);

@@ -892,6 +892,31 @@ TEMPLATE = """<!doctype html>
     text-align: center;
   }
   .login-error.show { display: block; }
+  .login-card.wide { max-width: 460px; }
+  .login-card p.switch-link {
+    margin: 18px 0 0;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .login-card p.switch-link a { color: var(--heading); font-weight: 600; text-decoration: none; }
+  .login-card label.field-sub { font-weight: 400; margin-top: 10px; }
+  .login-card .field-row { display: flex; gap: 10px; }
+  .login-card .field-row > div { flex: 1; }
+  .plan-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 8px;
+    cursor: pointer;
+    background: var(--cream);
+  }
+  .plan-option input { width: auto; }
+  .plan-option .plan-label { flex: 1; font-size: 13.5px; color: var(--ink); }
+  .plan-option .plan-price { font-size: 13px; font-weight: 600; color: var(--heading); }
 </style>
 </head>
 <body>
@@ -907,6 +932,47 @@ TEMPLATE = """<!doctype html>
     <input type="password" id="login-password" autocomplete="current-password" required>
     <button type="submit">Sign In</button>
     <div class="login-error" id="login-error">Incorrect email or password.</div>
+    <p class="switch-link">New here? <a href="#" id="show-signup-link">Sign up for access</a></p>
+  </form>
+
+  <form class="login-card wide" id="signup-form" style="display:none;">
+    <div class="mark"></div>
+    <h1>Create Your Account</h1>
+    <p class="sub">Pick a plan and start receiving leads</p>
+
+    <label for="signup-email">Email</label>
+    <input type="email" id="signup-email" autocomplete="username" required>
+    <label for="signup-password">Password</label>
+    <input type="password" id="signup-password" autocomplete="new-password" minlength="8" required>
+
+    <label style="margin-top:22px;">Return Address (printed on your letters)</label>
+    <label for="signup-from-name" class="field-sub">Business / Sender Name</label>
+    <input type="text" id="signup-from-name" required>
+    <label for="signup-from-address1" class="field-sub">Street Address</label>
+    <input type="text" id="signup-from-address1" required>
+    <label for="signup-from-address2" class="field-sub">Suite/Unit (optional)</label>
+    <input type="text" id="signup-from-address2">
+    <div class="field-row">
+      <div>
+        <label for="signup-from-city" class="field-sub">City</label>
+        <input type="text" id="signup-from-city" required>
+      </div>
+      <div style="max-width:70px;">
+        <label for="signup-from-state" class="field-sub">State</label>
+        <input type="text" id="signup-from-state" maxlength="2" required>
+      </div>
+      <div style="max-width:100px;">
+        <label for="signup-from-zip" class="field-sub">Zip</label>
+        <input type="text" id="signup-from-zip" required>
+      </div>
+    </div>
+
+    <label style="margin-top:22px;">Choose a Plan</label>
+    <div id="signup-plans"></div>
+
+    <button type="submit">Create Account &amp; Continue to Payment</button>
+    <div class="login-error" id="signup-error"></div>
+    <p class="switch-link">Already have an account? <a href="#" id="show-login-link">Log in</a></p>
   </form>
 </div>
 
@@ -930,6 +996,17 @@ TEMPLATE = """<!doctype html>
 </header>
 
 <main>
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Add More Access</h2>
+        <div class="sub">Subscribe to another county or the whole-state bundle</div>
+      </div>
+    </div>
+    <div id="add-access-plans" style="display:flex; flex-wrap:wrap; gap:10px; padding:18px 22px;"></div>
+    <div class="letter-result" id="add-access-result" style="margin:0 22px 18px;"></div>
+  </div>
+
   <div class="panel">
     <div class="panel-head">
       <div>
@@ -1651,6 +1728,41 @@ TEMPLATE = """<!doctype html>
   }
   renderPdfTemplatesTable();
 
+  // --- Add More Access (subscribe to another county/bundle while already logged in) ---
+  const addAccessPlansDiv = document.getElementById('add-access-plans');
+  const addAccessResult = document.getElementById('add-access-result');
+  const ownedCountyFolders = new Set(counties.map(c => c.folder));
+
+  (leadData.pricingPlans || []).forEach(plan => {
+    const alreadyOwned = plan.kind === 'county' && ownedCountyFolders.has(plan.key);
+    const btn = el('button', 'ghost', alreadyOwned
+      ? `${plan.label} — Active`
+      : `${plan.label} — $${(plan.priceCents / 100).toFixed(2)}/mo`);
+    btn.type = 'button';
+    btn.disabled = alreadyOwned;
+    if (!alreadyOwned) {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        addAccessResult.classList.remove('show', 'ok', 'error');
+        try {
+          const response = await fetch('/api/create-checkout-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind: plan.kind, key: plan.key }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Failed to start checkout.');
+          window.location.href = data.url;
+        } catch (err) {
+          addAccessResult.classList.add('show', 'error');
+          addAccessResult.textContent = err.message;
+          btn.disabled = false;
+        }
+      });
+    }
+    addAccessPlansDiv.appendChild(btn);
+  });
+
   document.getElementById('pdf-upload-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const companyName = document.getElementById('pdf-company-name').value.trim();
@@ -1818,6 +1930,81 @@ TEMPLATE = """<!doctype html>
       window.location.reload();
     });
   }
+
+  // --- Sign up (public paid path - separate from the admin-added accounts above) ---
+  const signupForm = document.getElementById('signup-form');
+  const signupError = document.getElementById('signup-error');
+  const signupPlansDiv = document.getElementById('signup-plans');
+  const showSignupLink = document.getElementById('show-signup-link');
+  const showLoginLink = document.getElementById('show-login-link');
+
+  showSignupLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    loginForm.style.display = 'none';
+    signupForm.style.display = 'block';
+  });
+  showLoginLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    signupForm.style.display = 'none';
+    loginForm.style.display = 'block';
+  });
+
+  (leadData.pricingPlans || []).forEach((plan, i) => {
+    const option = document.createElement('label');
+    option.className = 'plan-option';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'signup-plan';
+    radio.value = `${plan.kind}:${plan.key}`;
+    if (i === 0) radio.checked = true;
+    option.appendChild(radio);
+    option.appendChild(el('span', 'plan-label', plan.label));
+    option.appendChild(el('span', 'plan-price', `$${(plan.priceCents / 100).toFixed(2)}/mo`));
+    signupPlansDiv.appendChild(option);
+  });
+
+  signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    signupError.classList.remove('show');
+
+    const selectedPlan = signupForm.querySelector('input[name="signup-plan"]:checked');
+    if (!selectedPlan) {
+      signupError.textContent = 'Please choose a plan.';
+      signupError.classList.add('show');
+      return;
+    }
+    const [kind, key] = selectedPlan.value.split(':');
+
+    const body = {
+      email: document.getElementById('signup-email').value.trim(),
+      password: document.getElementById('signup-password').value,
+      fromName: document.getElementById('signup-from-name').value.trim(),
+      fromAddress1: document.getElementById('signup-from-address1').value.trim(),
+      fromAddress2: document.getElementById('signup-from-address2').value.trim(),
+      fromCity: document.getElementById('signup-from-city').value.trim(),
+      fromState: document.getElementById('signup-from-state').value.trim(),
+      fromZip: document.getElementById('signup-from-zip').value.trim(),
+      kind, key,
+    };
+
+    try {
+      const response = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Sign up failed.');
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      signupError.textContent = err.message;
+      signupError.classList.add('show');
+    }
+  });
 </script>
 
 </body>
@@ -1872,12 +2059,22 @@ def build_dashboard_html(authenticated=False, email=None):
     else:
         confirmed_leads, confirmed_count, lead_pursued_rate, pdf_templates = [], 0, "", []
 
+    # Pricing is public/marketing info (not sensitive lead data), so unlike
+    # everything else above this is loaded regardless of auth state - the
+    # sign-up form on the logged-out login screen needs it to show plan
+    # choices before anyone has an account yet.
+    pricing_plans = [
+        {"kind": p["kind"], "key": p["key"], "label": p["label"], "priceCents": p["monthly_price_cents"]}
+        for p in pipeline_db.get_pricing_plans()
+    ]
+
     counties = [{"folder": c["folder"], "label": c["label"]} for c in visible_counties]
     lead_data = {
         "confirmed": confirmed_leads,
         "templates": LETTER_TEMPLATES,
         "pdfTemplates": pdf_templates,
         "counties": counties,
+        "pricingPlans": pricing_plans,
     }
 
     if not authenticated:
@@ -1911,9 +2108,15 @@ def build_dashboard_html(authenticated=False, email=None):
 REQUIRED_SEND_FIELDS = ["fullName", "county", "address", "city", "state", "zip", "templateId"]
 
 
-def handle_send_letter(payload):
+def handle_send_letter(payload, sender_email=None):
     """Validates the request, sends via Lob, and records the attempt
-    (success or failure) in pipeline_cache.db. Returns (http_status, body_dict)."""
+    (success or failure) in pipeline_cache.db. Returns (http_status, body_dict).
+
+    sender_email's own mailing profile (if they've set one) becomes the
+    Lob "from" address, so each agent's letters show their own return
+    address - falls back to mailer.py's LOB_FROM_* env vars (Summit
+    Sotheby's, the original single-operator identity) when there's no
+    profile, which is exactly the case for the original admin account."""
     template_id = str(payload.get("templateId", "")).strip()
     is_pdf_template = template_id.startswith("pdf:")
 
@@ -1932,6 +2135,19 @@ def handle_send_letter(payload):
     county = payload.get("county", "")
     message = payload.get("message", "")
     to_name = owner_name or full_name
+
+    from_address = None
+    mailing_profile = pipeline_db.get_mailing_profile(sender_email) if sender_email else None
+    if mailing_profile:
+        from_address = {
+            "name": mailing_profile["from_name"],
+            "address_line1": mailing_profile["from_address1"],
+            "address_city": mailing_profile["from_city"],
+            "address_state": mailing_profile["from_state"],
+            "address_zip": mailing_profile["from_zip"],
+        }
+        if mailing_profile.get("from_address2"):
+            from_address["address_line2"] = mailing_profile["from_address2"]
 
     if is_pdf_template:
         try:
@@ -1964,6 +2180,7 @@ def handle_send_letter(payload):
                 zip_code=payload["zip"],
                 pdf_bytes=pdf_bytes,
                 description=description,
+                from_address=from_address,
             )
     else:
         letter_html = build_letter_html(message)
@@ -1977,6 +2194,7 @@ def handle_send_letter(payload):
                 zip_code=payload["zip"],
                 html_body=letter_html,
                 description=f"{template_id} - {full_name}",
+                from_address=from_address,
             )
 
     try:
@@ -2073,6 +2291,10 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_login(raw_body)
             return
 
+        if self.path == "/api/signup":
+            self._handle_signup(raw_body)
+            return
+
         if self.path == "/api/logout":
             destroy_session(self)
             self._send_json(200, {"ok": True}, clear_cookie=True)
@@ -2124,7 +2346,10 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 return
 
         try:
-            status, response = handler(payload)
+            if self.path == "/api/send-letter":
+                status, response = handler(payload, get_session_email(self))
+            else:
+                status, response = handler(payload)
         except Exception as e:
             print(f"Unexpected error handling {self.path}: {e}")
             status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
@@ -2156,6 +2381,64 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         token = create_session(signed_in_email)
         self._send_json(200, {"ok": True, "email": signed_in_email}, set_cookie=token)
 
+    def _handle_signup(self, raw_body):
+        try:
+            payload = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON body"})
+            return
+
+        email = str(payload.get("email", "")).strip().lower()
+        password = str(payload.get("password", ""))
+        from_name = str(payload.get("fromName", "")).strip()
+        from_address1 = str(payload.get("fromAddress1", "")).strip()
+        from_address2 = str(payload.get("fromAddress2", "")).strip()
+        from_city = str(payload.get("fromCity", "")).strip()
+        from_state = str(payload.get("fromState", "")).strip()
+        from_zip = str(payload.get("fromZip", "")).strip()
+        kind = str(payload.get("kind", "")).strip()
+        key = str(payload.get("key", "")).strip()
+
+        required = [email, password, from_name, from_address1, from_city, from_state, from_zip, kind, key]
+        if not all(required):
+            self._send_json(400, {"error": "All fields are required (Suite/Unit is optional)."})
+            return
+        if kind not in ("county", "state_bundle"):
+            self._send_json(400, {"error": "Invalid plan selected."})
+            return
+
+        try:
+            signed_up_email = auth.sign_up(email, password)
+        except auth.SignupError as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        pipeline_db.set_mailing_profile(
+            signed_up_email, from_name, from_address1, from_address2, from_city, from_state, from_zip,
+        )
+        token = create_session(signed_up_email)
+
+        base_url = self._base_url()
+        try:
+            checkout_url = billing.create_checkout_session(
+                signed_up_email, kind, key,
+                success_url=f"{base_url}/?checkout=success",
+                cancel_url=f"{base_url}/?checkout=cancel",
+            )
+        except billing.BillingError as e:
+            # Account/profile/session already exist even though checkout
+            # didn't start - they can retry from inside the dashboard rather
+            # than losing the signup entirely.
+            self._send_json(
+                200,
+                {"ok": True, "email": signed_up_email, "checkoutUrl": None,
+                 "error": f"Account created, but couldn't start checkout: {e}"},
+                set_cookie=token,
+            )
+            return
+
+        self._send_json(200, {"ok": True, "email": signed_up_email, "checkoutUrl": checkout_url}, set_cookie=token)
+
     def _base_url(self):
         host = self.headers.get("Host", f"127.0.0.1:{PORT}")
         scheme = "http" if host.startswith("127.0.0.1") or host.startswith("localhost") else "https"
@@ -2173,6 +2456,14 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         key = str(payload.get("key", "")).strip()
         if kind not in ("county", "state_bundle") or not key:
             self._send_json(400, {"error": "Invalid plan."})
+            return
+
+        already_has = (
+            key in pipeline_db.get_counties_for_user(email) if kind == "county"
+            else key in pipeline_db.get_state_grants_for_user(email)
+        )
+        if already_has:
+            self._send_json(400, {"error": "You already have access to that plan."})
             return
 
         base_url = self._base_url()

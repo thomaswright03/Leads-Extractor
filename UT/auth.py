@@ -1,9 +1,11 @@
 """Real login backed by Supabase Auth, replacing the old hardcoded
-client-side email/password check. Account creation is intentionally NOT
-handled here - per the user's choice, new users are added directly in the
-Supabase dashboard (Authentication -> Users -> Add user, with "Auto Confirm
-User" checked so no email-confirmation step is needed), not through a public
-sign-up form in this app.
+client-side email/password check.
+
+Account creation has two paths: admin-added accounts (created directly in
+the Supabase dashboard, Authentication -> Users -> Add user - unaffected,
+still just log in) and the public paid sign-up flow added 2026-07-27
+(sign_up() below), which auto-confirms the account server-side since
+there's no email/SMTP setup to send a confirmation link through.
 
 Reads SUPABASE_URL and SUPABASE_SECRET_KEY from the environment - same
 credentials pipeline_db.py already uses.
@@ -42,3 +44,23 @@ def sign_in(email, password):
     except AuthApiError as e:
         raise LoginError(str(e)) from e
     return result.user.email, result.session.expires_at
+
+
+class SignupError(Exception):
+    """User-facing message - duplicate email, weak password, or a
+    Supabase-side error."""
+
+
+def sign_up(email, password):
+    """Creates a new Supabase Auth user, auto-confirmed (no email step) -
+    the public paid sign-up path. Returns the created user's email. Raises
+    SignupError on failure (most commonly: that email is already registered)."""
+    try:
+        result = _get_client().auth.admin.create_user({
+            "email": email,
+            "password": password,
+            "email_confirm": True,
+        })
+    except AuthApiError as e:
+        raise SignupError(str(e)) from e
+    return result.user.email

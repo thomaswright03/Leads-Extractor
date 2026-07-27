@@ -129,7 +129,12 @@
       "Bash(rm -rf /tmp/render_test_venv)",
       "Bash(curl -s http://127.0.0.1:10000/ -o /tmp/_render_sim_page.html -w \"HTTP %{http_code}, %{size_download} bytes\\\\n\")",
       "Bash(kill 60480)",
-      "Bash(rm -f /tmp/_render_sim_page.html /tmp/_render_sim_test.log)"
+      "Bash(rm -f /tmp/_render_sim_page.html /tmp/_render_sim_test.log)",
+      "Bash(curl -s -X POST https://leads-extractor-48ha.onrender.com/api/create-checkout-session -o /tmp/_deploy_check.json -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -c /tmp/_stripe_test_cookies.txt -X POST https://leads-extractor-48ha.onrender.com/api/login -H 'Content-Type: application/json' -d '{\"email\":\"stripe-flow-test@example.com\",\"password\":\"TestPass123!verify\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/_stripe_test_cookies.txt -X POST https://leads-extractor-48ha.onrender.com/api/create-checkout-session -H 'Content-Type: application/json' -d '{\"kind\":\"county\",\"key\":\"slk\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(rm -f /tmp/_stripe_test_cookies.txt /tmp/_deploy_check.json /tmp/_stripe_plans.json /tmp/_stripe_webhook.json)",
+      "Bash(ps -p 51280 -o pid,lstart,command)"
     ]
   }
 }
