@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "slk-dashboard",
+      "name": "ut-dashboard",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["/Users/ssirstaff/Desktop/untitled folder/UT/slk/dashboard.py"],
+      "runtimeArgs": ["/Users/ssirstaff/Desktop/untitled folder/UT/dashboard.py"],
       "port": 8765
     }
   ]

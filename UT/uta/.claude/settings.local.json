@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m py_compile \"SLK\\\\$.py\")",
+      "Bash(python3 -m py_compile \"SLK\\\\$.py\" SLKobi.py)",
+      "Bash(python3 -m py_compile pricer.py)",
+      "Bash(python3 SLKobi.py daily)",
+      "Bash(pkill -f \"Google Chrome for Testing\")",
+      "Bash(pkill -f \"undetected_chromedriver\")",
+      "Bash(python3 -m py_compile SLKobi.py)",
+      "Bash(grep \"MacOS/Google Chrome$\")",
+      "Bash(python3 -m py_compile SLKobi.py \"SLK\\\\$.py\" pricer.py DC.py)",
+      "Bash(python3 SLKobi.py weekly)"
     ]
   }
 }

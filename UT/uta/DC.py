@@ -122,6 +122,14 @@ def _search_legacy_attempt(name):
     options.page_load_strategy = "eager"
     chrome_major = detect_chrome_major_version()
     driver = uc.Chrome(options=options, version_main=chrome_major) if chrome_major else uc.Chrome(options=options)
+    # undetected_chromedriver swaps out its initial blank tab as part of its
+    # own startup patching - calling .get() before that settles can raise
+    # NoSuchWindowException ("target window already closed"), confirmed by
+    # hand on the very first navigation of any site. This was previously
+    # getting silently absorbed by this function's own retry loop (wasting
+    # an attempt each time); switching to whatever window handle is
+    # actually live avoids it outright.
+    driver.switch_to.window(driver.window_handles[-1])
 
     try:
         driver.get("https://www.legacy.com/")

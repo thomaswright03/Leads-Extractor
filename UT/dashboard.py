@@ -1,4 +1,298 @@
-<!doctype html>
+import html
+import http.server
+import json
+import os
+import re
+import uuid
+import webbrowser
+from datetime import datetime
+
+import pandas as pd
+
+import mailer
+import pdf_merge
+import pipeline_db
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_PATH = os.path.join(SCRIPT_DIR, "dashboard.html")
+PDF_TEMPLATES_DIR = os.path.join(SCRIPT_DIR, "pdf_templates")
+PORT = 8765
+
+# Preset letter layouts. {{merge_fields}} are substituted client-side (so the
+# user can preview/edit the merged text before sending) and again
+# server-side in build_letter_html() as a safety net in case the client sent
+# an un-merged body.
+LETTER_TEMPLATES = [
+    {
+        "id": "probate-inquiry",
+        "name": "Probate Inquiry",
+        "body": (
+            "Dear {{owner_name}},\n\n"
+            "I'm reaching out regarding the property at {{address}}, {{city}}, {{state}} {{zip}}, "
+            "which I understand may be part of an estate following the passing of {{full_name}}. "
+            "Please accept my condolences.\n\n"
+            "If you are the person handling this property, I'd like to discuss options that might "
+            "make this process easier for you, including a straightforward cash purchase with no "
+            "repairs or listing required.\n\n"
+            "Feel free to reach out whenever is convenient - there's no obligation.\n\n"
+            "Sincerely,"
+        ),
+    },
+    {
+        "id": "cash-offer",
+        "name": "Cash Offer",
+        "body": (
+            "Dear {{owner_name}},\n\n"
+            "I'm interested in purchasing the property at {{address}}, {{city}}, {{state}} {{zip}} "
+            "for cash, as-is, on a timeline that works for you.\n\n"
+            "No repairs, no showings, no realtor commissions - just a simple, fast closing if it's "
+            "something you'd consider.\n\n"
+            "I'd welcome the chance to talk whenever you're ready.\n\n"
+            "Sincerely,"
+        ),
+    },
+]
+
+LETTER_TEMPLATES_BY_ID = {t["id"]: t for t in LETTER_TEMPLATES}
+
+
+def build_letter_html(message):
+    """Wraps the (already merge-field-substituted) letter body in a minimal
+    HTML page for Lob's `file` field. Lob renders supplied HTML to the
+    letter's printed page size."""
+    paragraphs = "".join(
+        f"<p>{html.escape(line)}</p>" for line in message.split("\n\n") if line.strip()
+    )
+    return f"""<html>
+<head><meta charset="utf-8"><style>
+  body {{ font-family: Georgia, 'Times New Roman', serif; font-size: 12pt; color: #111; margin: 0.75in; }}
+  p {{ margin: 0 0 1em; white-space: pre-wrap; }}
+</style></head>
+<body>{paragraphs}</body>
+</html>"""
+
+def _parse_multipart(content_type, body):
+    """Minimal multipart/form-data parser (stdlib only, no cgi module -
+    that's deprecated for removal). Returns {field_name: str} for text
+    fields and {field_name: {"filename": ..., "content": bytes}} for file
+    fields. Good enough for the browser-generated upload form this backs;
+    not a general-purpose MIME parser."""
+    if not content_type or "multipart/form-data" not in content_type:
+        return {}
+    boundary = None
+    for part in content_type.split(";"):
+        part = part.strip()
+        if part.startswith("boundary="):
+            boundary = part[len("boundary="):].strip('"')
+    if not boundary:
+        return {}
+
+    delimiter = b"--" + boundary.encode("utf-8")
+    fields = {}
+    for segment in body.split(delimiter):
+        segment = segment.strip(b"\r\n")
+        if not segment or segment == b"--":
+            continue
+        if b"\r\n\r\n" not in segment:
+            continue
+        header_block, content = segment.split(b"\r\n\r\n", 1)
+        content = content[:-2] if content.endswith(b"\r\n") else content
+        headers = header_block.decode("utf-8", errors="replace")
+        name_match = re.search(r'name="([^"]*)"', headers)
+        if not name_match:
+            continue
+        name = name_match.group(1)
+        filename_match = re.search(r'filename="([^"]*)"', headers)
+        if filename_match:
+            fields[name] = {"filename": filename_match.group(1), "content": content}
+        else:
+            fields[name] = content.decode("utf-8", errors="replace")
+    return fields
+
+
+def handle_upload_pdf_template(fields):
+    """Stores a company-submitted PDF letter design on disk and records it
+    in pipeline_cache.db, so it shows up as a send option alongside the
+    built-in merge-field templates."""
+    company_name = str(fields.get("companyName", "")).strip()
+    template_name = str(fields.get("templateName", "")).strip()
+    file_field = fields.get("file")
+
+    if not company_name or not template_name:
+        return 400, {"error": "Company name and template name are required."}
+    if not isinstance(file_field, dict) or not file_field.get("content"):
+        return 400, {"error": "No PDF file was uploaded."}
+    if not file_field.get("filename", "").lower().endswith(".pdf"):
+        return 400, {"error": "Only PDF files are accepted."}
+
+    os.makedirs(PDF_TEMPLATES_DIR, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.pdf"
+    with open(os.path.join(PDF_TEMPLATES_DIR, filename), "wb") as f:
+        f.write(file_field["content"])
+
+    template_id = pipeline_db.add_pdf_template(company_name, template_name, filename)
+    return 200, {"id": template_id, "filename": filename}
+
+
+def handle_set_pdf_template_field(payload):
+    """Records where on the page (as a ratio, not absolute points) the
+    owner/recipient name should be stamped for this PDF template - set via
+    the click-to-place preview in the admin panel."""
+    try:
+        template_id = int(payload.get("id"))
+        x_ratio = float(payload.get("xRatio"))
+        y_ratio = float(payload.get("yRatio"))
+    except (TypeError, ValueError):
+        return 400, {"error": "Invalid placement data."}
+    field = str(payload.get("field", "")).strip()
+    if field != "owner_name":
+        return 400, {"error": "Unsupported field."}
+    if not (0 <= x_ratio <= 1 and 0 <= y_ratio <= 1):
+        return 400, {"error": "Position must be within the page."}
+
+    if not pipeline_db.set_pdf_template_field_position(template_id, field, x_ratio, y_ratio):
+        return 404, {"error": "Template not found."}
+    return 200, {"ok": True}
+
+
+def handle_delete_pdf_template(payload):
+    try:
+        template_id = int(payload.get("id"))
+    except (TypeError, ValueError):
+        return 400, {"error": "Invalid template id."}
+
+    template = pipeline_db.get_pdf_template(template_id)
+    if not template:
+        return 404, {"error": "Template not found."}
+
+    pipeline_db.delete_pdf_template(template_id)
+    try:
+        os.remove(os.path.join(PDF_TEMPLATES_DIR, template["filename"]))
+    except OSError:
+        pass
+    return 200, {"ok": True}
+
+
+# Every county pipeline folder this dashboard aggregates, each generated by
+# template_county/new_county.py (or, for slk, hand-built before that wizard
+# existed). Add one entry here whenever a new county folder is created - this
+# is the one place that needs a manual update; nothing else auto-discovers
+# counties, since importing a county's own scripts here isn't safe (e.g.
+# uta/geocode.py pulls in selenium, which this dashboard has no reason to need).
+COUNTIES = [
+    {
+        "folder": "slk",
+        "label": "Salt Lake County",
+        "parcel_url_base": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=",
+    },
+    {
+        "folder": "uta",
+        "label": "Utah County",
+        "parcel_url_base": "https://www.utahcounty.gov/LandRecords/ValNotice.asp?av_serial=",
+    },
+]
+
+# Matches DC.py's get_output_path() naming: "2026-07-21.xlsx" or, on a second
+# run the same day, "2026-07-21_14-30-05.xlsx".
+DATED_XLSX_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:_\d{2}-\d{2}-\d{2})?\.xlsx$")
+
+
+def assessor_url(parcel_id, parcel_url_base):
+    digits = "".join(ch for ch in (parcel_id or "") if ch.isdigit())
+    return f"{parcel_url_base}{digits}" if digits else ""
+
+
+def format_date_added(date_str, fmt="%Y-%m-%d %H:%M:%S"):
+    if not date_str:
+        return ""
+    try:
+        return datetime.strptime(date_str, fmt).strftime("%b %d, %Y")
+    except ValueError:
+        return date_str
+
+
+def _clean_cell(value):
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def discover_dated_excel_files(county_dir):
+    """Every DC.py export sitting in one county's folder, named
+    YYYY-MM-DD[_HH-MM-SS].xlsx."""
+    found = []
+    for name in os.listdir(county_dir):
+        m = DATED_XLSX_PATTERN.match(name)
+        if m:
+            found.append((m.group(1), os.path.join(county_dir, name)))
+    # Sort by actual mtime, not filename - DC.py can regenerate a fresh
+    # "{date}.xlsx" (no suffix) after an earlier same-day conflict already
+    # pushed an older run out to "{date}_HH-MM-SS.xlsx", so the bare
+    # filename isn't reliably the oldest one on disk. A plain filename sort
+    # would then let that older, stale suffixed file overwrite the newer
+    # one's rows in load_confirmed_leads_from_excel()'s dedup below.
+    found.sort(key=lambda pair: os.path.getmtime(pair[1]))
+    return found
+
+
+def load_confirmed_leads_from_excel(county):
+    """Confirmed leads are the durable historical record - a county's own
+    pipeline_cache.db matches table gets wiped at the start of every
+    SLK$.py run, so anything from a previous day only survives in that day's
+    dated export. Read every such file in this county's folder and merge them
+    into one list, keyed by (full name, parcel id) so a lead re-confirmed on a
+    later date overwrites the earlier entry instead of duplicating it."""
+    county_dir = os.path.join(SCRIPT_DIR, county["folder"])
+    if not os.path.isdir(county_dir):
+        return []
+
+    leads_by_key = {}
+    for date_str, path in discover_dated_excel_files(county_dir):
+        try:
+            df = pd.read_excel(path)
+        except Exception as e:
+            print(f"Skipping {os.path.basename(path)}: {e}")
+            continue
+
+        date_display = format_date_added(date_str, fmt="%Y-%m-%d")
+        for _, row in df.iterrows():
+            full_name = _clean_cell(row.get("Full Name", ""))
+            if not full_name:
+                continue
+            parcel_id = _clean_cell(row.get("Parcel ID", ""))
+            matched_keywords_raw = _clean_cell(row.get("Matched Keywords", ""))
+
+            leads_by_key[(full_name, parcel_id)] = {
+                "fullName": full_name,
+                "ownerName": _clean_cell(row.get("Owner Name", "")),
+                "parcelId": parcel_id,
+                "assessorUrl": assessor_url(parcel_id, county["parcel_url_base"]),
+                "confirmed": True,
+                "matchedKeywords": [k.strip() for k in matched_keywords_raw.split(",") if k.strip()],
+                "obituaryUrl": _clean_cell(row.get("Obituary URL", "")),
+                "propertyValue": _clean_cell(row.get("Property Value", "")),
+                "address": _clean_cell(row.get("Address", "")),
+                "city": _clean_cell(row.get("City", "")),
+                "state": _clean_cell(row.get("State", "")),
+                "zip": _clean_cell(row.get("Zip", "")),
+                "dateAdded": date_display,
+                "dateAddedRaw": date_str,
+                "sourceFile": os.path.basename(path),
+                "county": county["label"],
+                "countyFolder": county["folder"],
+            }
+    return list(leads_by_key.values())
+
+
+def load_all_confirmed_leads():
+    """Every confirmed lead across every county in COUNTIES, in one flat list."""
+    leads = []
+    for county in COUNTIES:
+        leads.extend(load_confirmed_leads_from_excel(county))
+    return leads
+
+
+TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -209,14 +503,14 @@
   }
   thead th[data-key]:hover { color: var(--heading, var(--navy)); }
   thead th[data-key]::after {
-    content: "\2195";
+    content: "\\2195";
     position: absolute;
     right: 9px;
     opacity: 0.35;
     font-size: 11px;
   }
-  thead th[data-key].sort-asc::after { content: "\2191"; opacity: 1; color: var(--gold); }
-  thead th[data-key].sort-desc::after { content: "\2193"; opacity: 1; color: var(--gold); }
+  thead th[data-key].sort-asc::after { content: "\\2191"; opacity: 1; color: var(--gold); }
+  thead th[data-key].sort-desc::after { content: "\\2193"; opacity: 1; color: var(--gold); }
   tbody td {
     padding: 14px 22px;
     border-bottom: 1px solid var(--border);
@@ -557,10 +851,10 @@
       <div class="mark"></div>
       <div>
         <h1>Probate Property Leads</h1>
-        <p>Salt Lake County &middot; deceased-owner match report</p>
+        <p>__COUNTIES_SUBTITLE__ &middot; deceased-owner match report</p>
       </div>
     </div>
-    <div class="generated">Generated July 27, 2026 at 9:45 AM</div>
+    <div class="generated">Generated __GENERATED_AT__</div>
   </div>
 </header>
 
@@ -599,11 +893,11 @@
 
   <div class="stats">
     <div class="stat-card confirmed">
-      <div class="num">12</div>
+      <div class="num">__CONFIRMED_COUNT__</div>
       <div class="label">Real Leads Generated</div>
     </div>
     <div class="stat-card">
-      <div class="num">83%</div>
+      <div class="num">__LEAD_PURSUED_RATE__</div>
       <div class="label">Lead Pursued Rate</div>
     </div>
   </div>
@@ -616,6 +910,7 @@
       </div>
       <div class="controls">
         <div class="search-box"><input id="search-confirmed" type="text" placeholder="Search name, owner, parcel&hellip;"></div>
+        <select id="county-filter" class="ghost"><option value="">All Counties</option></select>
         <button class="ghost" id="bulk-send-open">Send This Week&rsquo;s Letters</button>
         <button class="ghost" id="export-confirmed">Export CSV</button>
         <button class="ghost" onclick="window.print()">Print</button>
@@ -624,12 +919,12 @@
     <table id="confirmed-table">
       <thead>
         <tr>
+          <th data-key="county">County</th>
           <th data-key="fullName">Deceased / Owner Record</th>
           <th data-key="parcelId">Parcel</th>
           <th data-key="address">Address</th>
           <th data-key="city">City</th>
           <th data-key="state">State</th>
-          <th data-key="zip">Zip</th>
           <th data-key="propertyValue">Property Value</th>
           <th data-key="dateAdded">Date Added</th>
           <th data-key="letterStatus">Letter</th>
@@ -715,7 +1010,7 @@
   Generated locally from pipeline_cache.db &middot; parcel and obituary links open the original source for verification before contacting anyone.
 </footer>
 
-<script id="lead-data" type="application/json">{"confirmed": [{"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH S & MARY V; JT", "parcelId": "22-19-326-006-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=22193260060000", "confirmed": true, "matchedKeywords": ["initial S matches deceased's own name 'Sanchez'"], "obituaryUrl": "https://www.legacy.com/person/joseph-a.-sanchez-jr.-61876405", "propertyValue": "$ 509,000", "address": "201 E 6715 S", "city": "MIDVALE", "state": "UT", "zip": "84047", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_3024fb49887ad169", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_3024fb49887ad169.pdf?version=v1&expires=1787506699&signature=tkco-GgwXn1WwEmNBIR5Mg1BvxMOqVUya7L4HdVaRLhmj57gPMaPvMwum7qPaNsB7mXYk4a6t5FxOOreW7WmCw", "testMode": true, "error": "", "sentAt": "2026-07-24 11:38:19"}}, {"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH A; TR (JAS REV LIV TR)", "parcelId": "21-36-332-003-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=21363320030000", "confirmed": true, "matchedKeywords": ["initial A matches deceased's own name 'A.'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/joseph-sanchez-obituary?id=61971430", "propertyValue": "$ 334,100", "address": "393 W PRINCETON DR", "city": "MIDVALE", "state": "UT", "zip": "84047", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_bd9170b40642121c", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_bd9170b40642121c.pdf?version=v1&expires=1787506975&signature=eyCo70hqVnkYZzBMwyVEO5twVv4NtwnHEKz4_yJH2XgmeS2gVNWOYPrLR0BnGrdHMrqqjOzne_Ex-VYgUIRrAw", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:55"}}, {"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH S & JACQUELYN E; JT", "parcelId": "14-27-430-004-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=14274300040000", "confirmed": true, "matchedKeywords": ["initial S matches deceased's own name 'Sanchez'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/joseph-sanchez-obituary?id=61971430", "propertyValue": "$ 550,500", "address": "3174 S TUSCANY DOWNS WY", "city": "WEST VALLEY CITY", "state": "UT", "zip": "84128", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_1da6aab200e0c19c", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_1da6aab200e0c19c.pdf?version=v1&expires=1787506975&signature=5HaasMpcQTnyzw00SGMYmsJf6C3DXXJIgg893PO4jKkfhwMWerx39D50Hwi3k8Pq_I0_LY946R4ZtXGjAFS5DQ", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:55"}}, {"fullName": "Joseph A. Sanchez Jr.", "ownerName": "SANCHEZ, JOSEPH A", "parcelId": "21-27-454-003-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=21274540030000", "confirmed": true, "matchedKeywords": ["initial A matches deceased's own name 'A.'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/joseph-sanchez-obituary?id=61971430", "propertyValue": "$ 357,300", "address": "7639 S SUNRISEPLACE WEST", "city": "WEST JORDAN", "state": "UT", "zip": "84084", "dateAdded": "Jul 19, 2026", "dateAddedRaw": "2026-07-19", "sourceFile": "2026-07-19.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_36d9835c3f34b964", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_36d9835c3f34b964.pdf?version=v1&expires=1787506976&signature=aJ1IU5gNlEPXXDMh9bNveUkHqrrfxEuj1eEIR7DkCPFQAp--SSOnRcYb0y2uv48F74f7AAU00xs0tlIz51Q7Dg", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:56"}}, {"fullName": "Jack Frost", "ownerName": "FROST, JACK E & LORETTA O; TRS", "parcelId": "16-22-326-011-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=16223260110000", "confirmed": true, "matchedKeywords": ["loretta"], "obituaryUrl": "https://www.legacy.com/us/obituaries/messenger/name/jack-frost-obituary?id=61937715", "propertyValue": "$ 1,279,800", "address": "2171 E PARLEYS TER", "city": "SALT LAKE CITY", "state": "UT", "zip": "84109", "dateAdded": "Jul 20, 2026", "dateAddedRaw": "2026-07-20", "sourceFile": "2026-07-20.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_76817ca9902b8685", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_76817ca9902b8685.pdf?version=v1&expires=1787506976&signature=7rb-DbRMQEHQ9-PF0hWpitotuMReThbzw_3p8_7DgF2QmF9zQfPx3czRSeBZLNCF-P4b6cmSbOPABc0CKit_CA", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:56"}}, {"fullName": "John Wells Knowlton Jr.", "ownerName": "KNOWLTON, JOHN W, III & LENNIE N; JT", "parcelId": "16-28-203-002-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=16282030020000", "confirmed": true, "matchedKeywords": ["initial W matches deceased's own name 'Wells'"], "obituaryUrl": "https://www.legacy.com/person/John-Wells-Knowlton-Jr.-61888014", "propertyValue": "$ 846,100", "address": "2825 S IMPERIAL ST", "city": "SALT LAKE CITY", "state": "UT", "zip": "84106", "dateAdded": "Jul 21, 2026", "dateAddedRaw": "2026-07-21", "sourceFile": "2026-07-21.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_6d360ff061f4a337", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_6d360ff061f4a337.pdf?version=v1&expires=1787506977&signature=TWAzHhDZp6WCVmYSD2-_tpuhKpK_XdDM5jYBTmayCl-Yg3mRIhg_jkHFIaetm1Qlu9gAkmn7iAj-Jjm-_EfPDA", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:57"}}, {"fullName": "Jacob Gregory Banyai", "ownerName": "BANYAI, JACOB G; TR (JGB LV TR)", "parcelId": "22-27-228-011-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=22272280110000", "confirmed": true, "matchedKeywords": ["initial G matches deceased's own name 'Gregory'"], "obituaryUrl": "https://www.legacy.com/person/Jacob-Gregory-Banyai-61925216", "propertyValue": "$ 671,100", "address": "7041 S CATALINA DR", "city": "COTTONWOOD HEIGHTS", "state": "UT", "zip": "84121", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_41c413825984b4cb", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_41c413825984b4cb.pdf?version=v1&expires=1787506977&signature=_StaUZ_xlVVwprJt9LzWwQs7Y3XOJ2wDqvIAbnD7_24Nrjq3WR4l7toEhnoX7yIGxMsaxLda2e9m94DhoQjiCQ", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:57"}}, {"fullName": "Karen Jordan \"Casey\" Bauer", "ownerName": "BAUER, KAREN J; TR", "parcelId": "28-04-177-017-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=28041770170000", "confirmed": true, "matchedKeywords": ["initial J matches deceased's own name 'Jordan'"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/karen-bauer-obituary?id=62025113", "propertyValue": "$ 711,400", "address": "1581 E ALTAIR CIR", "city": "SANDY", "state": "UT", "zip": "84093", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_fc3f824ab45b1ab1", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_fc3f824ab45b1ab1.pdf?version=v1&expires=1787506978&signature=lwSPESwGajvELLlllGsUQx6de954enTdmjCCVUqEOWFSBhAVyX-DHZa-QYQOB4VO3XZfWoEJuEAB6Y5k9ra_CQ", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:58"}}, {"fullName": "Joellen Pingree Dillard", "ownerName": "DILLARD, JOELLEN P; TR", "parcelId": "28-12-276-003-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=28122760030000", "confirmed": true, "matchedKeywords": ["initial P matches deceased's own name 'Pingree'"], "obituaryUrl": "", "propertyValue": "$ 2,489,890", "address": "4261 LITTLE COTTONWOOD RD", "city": "UNINCORPORATED", "state": "UT", "zip": "84092", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_44dfb62a3cc76ae7", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_44dfb62a3cc76ae7.pdf?version=v1&expires=1787506979&signature=aEgQcQBbkXnSFbd7XlXUBgY-_-9JD-IwPKd0BqCdceIThWx1zXSWEGmPKlYrT8f4147P7mXpDL7SUivu6OK1Dw", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:59"}}, {"fullName": "Marilynn Joy Marriott (Tingey)", "ownerName": "MARRIOTT, DAVID D & MARILYNN T; TRS (D&M", "parcelId": "16-10-351-007-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=16103510070000", "confirmed": true, "matchedKeywords": ["david"], "obituaryUrl": "https://www.legacy.com/us/obituaries/deseretnews/name/marilynn-marriott-obituary?id=62029864", "propertyValue": "$ 1,453,400", "address": "2024 E PRINCETON DR", "city": "SALT LAKE CITY", "state": "UT", "zip": "84108", "dateAdded": "Jul 23, 2026", "dateAddedRaw": "2026-07-23", "sourceFile": "2026-07-23.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "ltr_ef6bb6c15c2c6345", "status": "sent", "expectedDeliveryDate": "2026-08-03", "previewUrl": "https://lob-assets.com/letters/ltr_ef6bb6c15c2c6345.pdf?version=v1&expires=1787506979&signature=Jm8RFstTVLeswd2q720Iw6nH0tRnMX0opR1WqJqOFyJyy2rEAQAlCGRPqxO4u4ihfkZNNZUOzVXfarBYhhidDg", "testMode": true, "error": "", "sentAt": "2026-07-24 11:42:59"}}, {"fullName": "Debra \"Debbie\" Sanich", "ownerName": "SANICH, DEBRA; JT SANICH, LARRY; JT", "parcelId": "28-05-255-004-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=28052550040000", "confirmed": true, "matchedKeywords": ["larry"], "obituaryUrl": "https://www.legacy.com/us/obituaries/saltlaketribune/name/debra-sanich-obituary?id=61961920", "propertyValue": "$ 482,500", "address": "8947 S HEIGHTS DR", "city": "SANDY", "state": "UT", "zip": "84094.0", "dateAdded": "Jul 22, 2026", "dateAddedRaw": "2026-07-22", "sourceFile": "2026-07-22.xlsx", "letter": {"templateId": "probate-inquiry", "lobLetterId": "", "status": "failed", "expectedDeliveryDate": "", "previewUrl": "", "testMode": true, "error": "address_zip is not a valid ZIP code", "sentAt": "2026-07-24 11:42:59"}}, {"fullName": "Geraldine White", "ownerName": "WHITE, LESLIE & GERALDINE; JT", "parcelId": "22-08-157-010-0000", "assessorUrl": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=22081570100000", "confirmed": true, "matchedKeywords": ["leslie"], "obituaryUrl": "https://www.legacy.com/us/obituaries/deseretnews/name/geraldine-white-obituary?id=62002736", "propertyValue": "$ 363,600", "address": "825 E THREE FTNS CIR # 9", "city": "", "state": "UT", "zip": "", "dateAdded": "Jul 22, 2026", "dateAddedRaw": "2026-07-22", "sourceFile": "2026-07-22.xlsx", "letter": null}], "templates": [{"id": "probate-inquiry", "name": "Probate Inquiry", "body": "Dear {{owner_name}},\n\nI'm reaching out regarding the property at {{address}}, {{city}}, {{state}} {{zip}}, which I understand may be part of an estate following the passing of {{full_name}}. Please accept my condolences.\n\nIf you are the person handling this property, I'd like to discuss options that might make this process easier for you, including a straightforward cash purchase with no repairs or listing required.\n\nFeel free to reach out whenever is convenient - there's no obligation.\n\nSincerely,"}, {"id": "cash-offer", "name": "Cash Offer", "body": "Dear {{owner_name}},\n\nI'm interested in purchasing the property at {{address}}, {{city}}, {{state}} {{zip}} for cash, as-is, on a timeline that works for you.\n\nNo repairs, no showings, no realtor commissions - just a simple, fast closing if it's something you'd consider.\n\nI'd welcome the chance to talk whenever you're ready.\n\nSincerely,"}], "pdfTemplates": [{"id": "pdf:2", "rawId": 2, "name": "Sample.. \u2014 Sample PDF", "company": "Sample..", "templateName": "Sample PDF", "filename": "6ab99c6a1561420ea10ee3cc22c698e4.pdf", "fieldPositions": {}, "uploadedAt": "2026-07-24 14:17:33"}]}</script>
+<script id="lead-data" type="application/json">__LEAD_DATA_JSON__</script>
 <script>
   const leadData = JSON.parse(document.getElementById('lead-data').textContent);
   const confirmed = leadData.confirmed;
@@ -902,6 +1197,7 @@
         fullName: lead.fullName,
         ownerName: lead.ownerName,
         parcelId: lead.parcelId,
+        county: lead.countyFolder,
         address: lead.address,
         city: lead.city,
         state: lead.state,
@@ -992,7 +1288,7 @@
       checkbox.checked = true;
       checkbox.addEventListener('change', updateBulkSendState);
       row.appendChild(checkbox);
-      row.appendChild(el('span', 'name', lead.fullName));
+      row.appendChild(el('span', 'name', `${lead.fullName} (${lead.county})`));
       row.appendChild(el('span', 'addr', `${lead.address}, ${lead.city} ${lead.zip}`));
       row.appendChild(el('span', 'status', ''));
       bulkList.appendChild(row);
@@ -1066,6 +1362,8 @@
   function renderRow(lead) {
     const tr = document.createElement('tr');
 
+    tr.appendChild(el('td', null, lead.county || '—'));
+
     const nameCell = el('td', 'name-cell');
     nameCell.appendChild(el('div', 'deceased', lead.fullName));
     nameCell.appendChild(el('div', 'owner', lead.ownerName));
@@ -1082,7 +1380,6 @@
     tr.appendChild(el('td', null, lead.address || '—'));
     tr.appendChild(el('td', null, lead.city || '—'));
     tr.appendChild(el('td', null, lead.state || '—'));
-    tr.appendChild(el('td', null, lead.zip || '—'));
     tr.appendChild(el('td', null, lead.propertyValue || '—'));
     tr.appendChild(el('td', null, lead.dateAdded || '—'));
 
@@ -1131,7 +1428,8 @@
            lead.parcelId.toLowerCase().includes(q) ||
            lead.address.toLowerCase().includes(q) ||
            lead.city.toLowerCase().includes(q) ||
-           lead.zip.toLowerCase().includes(q);
+           lead.zip.toLowerCase().includes(q) ||
+           lead.county.toLowerCase().includes(q);
   }
 
   // Column sorting. Most columns sort on a plain lead field, but "Mailed In"
@@ -1156,10 +1454,11 @@
     }
   }
 
-  const confirmedState = { query: '', sortKey: null, sortDir: 'asc' };
+  const confirmedState = { query: '', countyFolder: '', sortKey: null, sortDir: 'asc' };
 
   function applyState(list, state) {
-    let result = state.query ? list.filter(l => matches(l, state.query)) : list.slice();
+    let result = state.countyFolder ? list.filter(l => l.countyFolder === state.countyFolder) : list.slice();
+    if (state.query) result = result.filter(l => matches(l, state.query));
     if (state.sortKey) {
       result.sort((a, b) => {
         const va = sortValue(a, state.sortKey);
@@ -1210,17 +1509,29 @@
     repaintConfirmed();
   });
 
+  const countyFilterSelect = document.getElementById('county-filter');
+  (leadData.counties || []).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.folder;
+    opt.textContent = c.label;
+    countyFilterSelect.appendChild(opt);
+  });
+  countyFilterSelect.addEventListener('change', e => {
+    confirmedState.countyFolder = e.target.value;
+    repaintConfirmed();
+  });
+
   document.getElementById('export-confirmed').addEventListener('click', () => {
-    const rows = [['Deceased', 'Owner Record', 'Parcel ID', 'Address', 'City', 'State', 'Zip', 'Property Value', 'Matched Keywords', 'Obituary URL', 'Assessor URL', 'Date Added', 'Letter Status', 'Letter Sent At', 'Mailed In', 'Date Mailed In']];
+    const rows = [['County', 'Deceased', 'Owner Record', 'Parcel ID', 'Address', 'City', 'State', 'Zip', 'Property Value', 'Matched Keywords', 'Obituary URL', 'Assessor URL', 'Date Added', 'Letter Status', 'Letter Sent At', 'Mailed In', 'Date Mailed In']];
     confirmed.forEach(l => {
       const mailedState = getMailedState(l);
       rows.push([
-        l.fullName, l.ownerName, l.parcelId, l.address, l.city, l.state, l.zip, l.propertyValue, l.matchedKeywords.join('; '), l.obituaryUrl, l.assessorUrl, l.dateAdded,
+        l.county, l.fullName, l.ownerName, l.parcelId, l.address, l.city, l.state, l.zip, l.propertyValue, l.matchedKeywords.join('; '), l.obituaryUrl, l.assessorUrl, l.dateAdded,
         letterStatusLabel(l), (l.letter && l.letter.sentAt) || '',
         mailedState.mailed ? 'Yes' : 'No', mailedState.date
       ]);
     });
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
     const blob = new Blob([csv], {type: 'text/csv'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1423,3 +1734,291 @@
 
 </body>
 </html>
+"""
+
+
+def build_dashboard_html():
+    """Re-reads the dated xlsx files and rebuilds the page fresh - called on
+    every request so a browser refresh always reflects the latest exports,
+    with no need to re-run this script."""
+    confirmed_leads = load_all_confirmed_leads()
+    confirmed_count = len(confirmed_leads)
+
+    letters_sent = pipeline_db.get_latest_letters_sent()
+    for lead in confirmed_leads:
+        letter = letters_sent.get((lead["countyFolder"], lead["fullName"], lead["parcelId"]))
+        lead["letter"] = letter or None
+
+    # Lead Pursued Rate = % of confirmed leads that have at least one
+    # successfully sent letter on record.
+    sent_count = sum(1 for lead in confirmed_leads if lead["letter"] and lead["letter"]["status"] == "sent")
+    lead_pursued_rate = f"{round(100 * sent_count / confirmed_count)}%" if confirmed_count else ""
+
+    pdf_templates = [
+        {
+            "id": f"pdf:{t['id']}",
+            "rawId": t["id"],
+            "name": f"{t['companyName']} — {t['templateName']}",
+            "company": t["companyName"],
+            "templateName": t["templateName"],
+            "filename": t["filename"],
+            "fieldPositions": t["fieldPositions"],
+            "uploadedAt": t["uploadedAt"],
+        }
+        for t in pipeline_db.get_pdf_templates()
+    ]
+    counties = [{"folder": c["folder"], "label": c["label"]} for c in COUNTIES]
+    lead_data = {
+        "confirmed": confirmed_leads,
+        "templates": LETTER_TEMPLATES,
+        "pdfTemplates": pdf_templates,
+        "counties": counties,
+    }
+
+    county_labels = [c["label"] for c in COUNTIES]
+    if len(county_labels) <= 3:
+        counties_subtitle = " & ".join(county_labels)
+    else:
+        counties_subtitle = f"{len(county_labels)} Utah Counties"
+
+    return (TEMPLATE
+        .replace("__GENERATED_AT__", datetime.now().strftime("%B %d, %Y at %-I:%M %p"))
+        .replace("__CONFIRMED_COUNT__", str(confirmed_count))
+        .replace("__LEAD_PURSUED_RATE__", lead_pursued_rate)
+        .replace("__COUNTIES_SUBTITLE__", counties_subtitle)
+        .replace("__LEAD_DATA_JSON__", json.dumps(lead_data))
+    )
+
+
+REQUIRED_SEND_FIELDS = ["fullName", "county", "address", "city", "state", "zip", "templateId"]
+
+
+def handle_send_letter(payload):
+    """Validates the request, sends via Lob, and records the attempt
+    (success or failure) in pipeline_cache.db. Returns (http_status, body_dict)."""
+    template_id = str(payload.get("templateId", "")).strip()
+    is_pdf_template = template_id.startswith("pdf:")
+
+    required = REQUIRED_SEND_FIELDS if is_pdf_template else REQUIRED_SEND_FIELDS + ["message"]
+    missing = [f for f in required if not str(payload.get(f, "")).strip()]
+    if missing:
+        # City/Zip are the two fields known to come back blank from
+        # geocoding for some Salt Lake County addresses (see dashboard.py's
+        # confirmed-leads table) - this is the same gap surfacing here as a
+        # hard block on sending, since Lob can't deliver an incomplete address.
+        return 400, {"error": f"Missing required field(s): {', '.join(missing)}. Can't mail without a complete address."}
+
+    full_name = payload.get("fullName", "")
+    owner_name = payload.get("ownerName", "")
+    parcel_id = payload.get("parcelId", "")
+    county = payload.get("county", "")
+    message = payload.get("message", "")
+    to_name = owner_name or full_name
+
+    if is_pdf_template:
+        try:
+            pdf_row_id = int(template_id.split(":", 1)[1])
+        except ValueError:
+            return 400, {"error": "Invalid PDF template id."}
+        pdf_template = pipeline_db.get_pdf_template(pdf_row_id)
+        if not pdf_template:
+            return 400, {"error": "That PDF template no longer exists."}
+        try:
+            with open(os.path.join(PDF_TEMPLATES_DIR, pdf_template["filename"]), "rb") as f:
+                pdf_bytes = f.read()
+        except OSError:
+            return 400, {"error": "That PDF template's file is missing on disk."}
+
+        owner_position = pdf_template["fieldPositions"].get("owner_name")
+        if owner_position:
+            pdf_bytes = pdf_merge.stamp_owner_name(
+                pdf_bytes, owner_position["x"], owner_position["y"], to_name,
+            )
+
+        description = f"{pdf_template['companyName']} - {pdf_template['templateName']} - {full_name}"
+
+        def send():
+            return mailer.send_letter_pdf(
+                to_name=to_name,
+                address_line1=payload["address"],
+                city=payload["city"],
+                state=payload["state"],
+                zip_code=payload["zip"],
+                pdf_bytes=pdf_bytes,
+                description=description,
+            )
+    else:
+        letter_html = build_letter_html(message)
+
+        def send():
+            return mailer.send_letter(
+                to_name=to_name,
+                address_line1=payload["address"],
+                city=payload["city"],
+                state=payload["state"],
+                zip_code=payload["zip"],
+                html_body=letter_html,
+                description=f"{template_id} - {full_name}",
+            )
+
+    try:
+        result = send()
+    except mailer.MailerConfigError as e:
+        return 400, {"error": str(e)}
+    except mailer.LobAPIError as e:
+        pipeline_db.record_letter_sent(
+            county, full_name, owner_name, parcel_id, template_id, message,
+            status="failed", test_mode=mailer.is_test_mode(), error=str(e),
+        )
+        return 502, {"error": str(e)}
+
+    pipeline_db.record_letter_sent(
+        county, full_name, owner_name, parcel_id, template_id, message,
+        lob_letter_id=result.get("id", ""),
+        status="sent",
+        expected_delivery_date=result.get("expected_delivery_date", ""),
+        preview_url=result.get("url", ""),
+        test_mode=mailer.is_test_mode(),
+    )
+    return 200, {
+        "lobLetterId": result.get("id", ""),
+        "expectedDeliveryDate": result.get("expected_delivery_date", ""),
+        "previewUrl": result.get("url", ""),
+        "testMode": mailer.is_test_mode(),
+    }
+
+
+class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith("/pdf-templates/"):
+            rest = self.path[len("/pdf-templates/"):]
+            if rest.endswith("/preview.png"):
+                self._serve_pdf_template_preview(rest[: -len("/preview.png")])
+            else:
+                self._serve_pdf_template(rest)
+            return
+
+        body = build_dashboard_html().encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_pdf_template(self, filename):
+        # basename() strips any "../" a crafted path might carry - only
+        # files actually inside PDF_TEMPLATES_DIR are servable.
+        filename = os.path.basename(filename)
+        path = os.path.join(PDF_TEMPLATES_DIR, filename)
+        if not filename.endswith(".pdf") or not os.path.isfile(path):
+            self._send_json(404, {"error": "Not found"})
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _serve_pdf_template_preview(self, filename):
+        filename = os.path.basename(filename)
+        path = os.path.join(PDF_TEMPLATES_DIR, filename)
+        if not filename.endswith(".pdf") or not os.path.isfile(path):
+            self._send_json(404, {"error": "Not found"})
+            return
+        with open(path, "rb") as f:
+            pdf_bytes = f.read()
+        try:
+            png_bytes, _, _ = pdf_merge.render_first_page_png(pdf_bytes)
+        except Exception as e:
+            print(f"Unexpected error rendering PDF preview: {e}")
+            self._send_json(500, {"error": "Couldn't render a preview of that PDF."})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(png_bytes)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(png_bytes)
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        raw_body = self.rfile.read(length) if length else b""
+
+        if self.path == "/api/upload-pdf-template":
+            fields = _parse_multipart(self.headers.get("Content-Type", ""), raw_body)
+            try:
+                status, response = handle_upload_pdf_template(fields)
+            except Exception as e:
+                print(f"Unexpected error uploading PDF template: {e}")
+                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+            self._send_json(status, response)
+            return
+
+        handlers = {
+            "/api/send-letter": handle_send_letter,
+            "/api/delete-pdf-template": handle_delete_pdf_template,
+            "/api/set-pdf-template-field": handle_set_pdf_template_field,
+        }
+        handler = handlers.get(self.path)
+        if handler is None:
+            self._send_json(404, {"error": "Not found"})
+            return
+
+        try:
+            payload = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON body"})
+            return
+
+        try:
+            status, response = handler(payload)
+        except Exception as e:
+            print(f"Unexpected error handling {self.path}: {e}")
+            status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+
+        self._send_json(status, response)
+
+    def _send_json(self, status, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        # The default access log (one line per request, including favicon
+        # requests) is noisy for a single-user local tool - just note refreshes.
+        print(f"Dashboard refreshed at {datetime.now().strftime('%H:%M:%S')}")
+
+
+def main():
+    # Also write a static snapshot to disk, for reference / opening without
+    # the server running - but the server below is the primary way to view
+    # this now, since it rebuilds from the xlsx files on every request.
+    with open(OUTPUT_PATH, "w") as f:
+        f.write(build_dashboard_html())
+
+    try:
+        server = http.server.HTTPServer(("127.0.0.1", PORT), DashboardRequestHandler)
+    except OSError as e:
+        print(f"Couldn't start the dashboard server on port {PORT}: {e}")
+        print("Is dashboard.py already running in another terminal? If so, just refresh that browser tab.")
+        raise SystemExit(1)
+
+    url = f"http://127.0.0.1:{PORT}/"
+    print(f"Dashboard live at {url} - refresh the page any time to see the latest data.")
+    print("Press Ctrl+C to stop.")
+    webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping dashboard server.")
+        server.shutdown()
+
+
+if __name__ == "__main__":
+    main()

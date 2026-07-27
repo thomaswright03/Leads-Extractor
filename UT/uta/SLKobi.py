@@ -1,32 +1,56 @@
 import math
 import re
+import subprocess
 import sys
 from datetime import datetime
 
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 
 import pipeline_db
 
 MODE = pipeline_db.resolve_mode(sys.argv)
 TODAY = datetime.now().date()
 
+CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+
+def detect_chrome_major_version():
+    """undetected_chromedriver's own version auto-detection can grab a
+    ChromeDriver build newer than the actually installed Chrome, which
+    breaks the session entirely - pin it to the real installed major
+    version instead. Same as DC.py's helper of the same name."""
+    try:
+        output = subprocess.check_output([CHROME_BINARY, "--version"], text=True)
+        match = re.search(r"(\d+)\.", output)
+        if match:
+            return int(match.group(1))
+    except Exception:
+        pass
+    return None
+
+
 # Set up Chrome options
-chrome_options = Options()
+chrome_options = uc.ChromeOptions()
+chrome_options.headless = False
 # Don't block driver.get() on images/ads/trackers finishing to load -
 # the WebDriverWait below already waits for the specific elements we need.
 chrome_options.page_load_strategy = "eager"
-# chrome_options.add_argument("--headless=new")  # Uncomment if you want headless mode
-chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
 
 # Initialize the Chrome driver
-driver = webdriver.Chrome(options=chrome_options)
+chrome_major = detect_chrome_major_version()
+driver = uc.Chrome(options=chrome_options, version_main=chrome_major) if chrome_major else uc.Chrome(options=chrome_options)
+# undetected_chromedriver swaps out its initial blank tab as part of its own
+# startup patching - calling .get() before that settles can raise
+# NoSuchWindowException ("target window already closed") because the
+# session's current window still points at the tab it just closed.
+# Confirmed by hand: reproduces on the very first navigation of any site,
+# not just this one. Switching to whatever window handle is actually live
+# avoids it.
+driver.switch_to.window(driver.window_handles[-1])
 
 # Legacy.com's own county-level browse page - the same URL pattern works for
 # every county in the country (.../local/<state>/<county>-county), with the
@@ -36,14 +60,25 @@ OBITUARY_URL = 'https://www.legacy.com/us/obituaries/local/utah/utah-county'
 DATE_RANGE_BY_MODE = {"daily": "today", "weekly": "last_week"}
 obituary_url = f"{OBITUARY_URL}?date_range={DATE_RANGE_BY_MODE[MODE]}"
 
-# Every obituary card on the page is an <article> at this same parent path;
-# dropping the [N] index off "article" matches all of them in one XPath.
-NAME_XPATH = "/html/body/div[4]/div/div[2]/div/div[2]/div/article/div[1]/div/a/div/div"
+# Each result is an <article data-component="PersonCardContainer"> - found
+# by inspecting the live site after a redesign broke the old absolute-
+# position XPath this used to use. Every card actually has *two* links
+# with the same "View obituary details for <Name>" aria-label (one wraps
+# the text, one wraps the thumbnail photo) - confirmed by hand - so this
+# has to look up the name scoped to one card at a time (driver.find_element,
+# singular, only ever returns the first match) rather than a single flat
+# query for every matching link on the page, or every name gets counted
+# twice.
+CARD_XPATH = '//article[@data-component="PersonCardContainer"]'
+NAME_LINK_XPATH = './/a[starts-with(@aria-label, "View obituary details for")]'
+NAME_LINK_PREFIX = "View obituary details for "
 
-# Total-results count shown above the list (e.g. "143 results") - the site
+# Total-results count shown above the list (e.g. "143 Results") - the site
 # paginates at exactly 50 per page, so this tells us how many more pages
-# (?page=2, ?page=3, ...) to walk through beyond the first.
-RESULT_COUNT_XPATH = "/html/body/div[4]/div/div[2]/div/div[1]/div[1]"
+# (?page=2, ?page=3, ...) to walk through beyond the first. Matched by the
+# stable "N Results" wording rather than a position/class, for the same
+# reason as NAME_LINK_XPATH above.
+RESULT_COUNT_XPATH = '//div[contains(text(), "Results")]'
 RESULTS_PER_PAGE = 50
 
 
@@ -82,7 +117,7 @@ try:
 
         try:
             WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, NAME_XPATH))
+                EC.presence_of_element_located((By.XPATH, CARD_XPATH))
             )
         except Exception:
             print(f"No obituary entries found on page {page}.")
@@ -91,8 +126,13 @@ try:
         # All 50 (or fewer, on the last page) cards are already in the DOM -
         # no scrolling/lazy-loading needed to get at them.
         page_names = 0
-        for element in driver.find_elements(By.XPATH, NAME_XPATH):
-            name = element.text.strip()
+        for card in driver.find_elements(By.XPATH, CARD_XPATH):
+            try:
+                link = card.find_element(By.XPATH, NAME_LINK_XPATH)
+            except Exception:
+                continue
+            label = link.get_attribute("aria-label") or ""
+            name = label[len(NAME_LINK_PREFIX):].strip() if label.startswith(NAME_LINK_PREFIX) else ""
             if name:
                 # The date_range query param already limits results to the
                 # window we care about, so every name gets tagged with
