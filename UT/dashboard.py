@@ -13,6 +13,7 @@ from datetime import datetime
 import pandas as pd
 
 import auth
+import billing
 import mailer
 import pdf_merge
 import pipeline_db
@@ -229,11 +230,13 @@ COUNTIES = [
     {
         "folder": "slk",
         "label": "Salt Lake County",
+        "state": "UT",
         "parcel_url_base": "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id=",
     },
     {
         "folder": "uta",
         "label": "Utah County",
+        "state": "UT",
         "parcel_url_base": "https://www.utahcounty.gov/LandRecords/ValNotice.asp?av_serial=",
     },
 ]
@@ -328,6 +331,18 @@ def load_confirmed_leads_from_excel(county):
                 "countyFolder": county["folder"],
             }
     return list(leads_by_key.values())
+
+
+def get_allowed_county_folders(email):
+    """Every county folder key this email can access - explicit per-county
+    grants unioned with whole-state grants expanded against today's
+    COUNTIES list. Shared by build_dashboard_html() and the send-letter
+    authorization check so the two can't drift apart."""
+    if not email:
+        return set()
+    granted_counties = set(pipeline_db.get_counties_for_user(email))
+    granted_states = set(pipeline_db.get_state_grants_for_user(email))
+    return granted_counties | {c["folder"] for c in COUNTIES if c["state"] in granted_states}
 
 
 def load_all_confirmed_leads(counties):
@@ -1819,9 +1834,12 @@ def build_dashboard_html(authenticated=False, email=None):
     embedded in the response at all - only the login screen is meaningful,
     so there's nothing for an unauthenticated request to read out of the
     page source either. When authenticated, only the counties this email
-    has been explicitly granted (via user_county_access) are loaded -
-    access is opt-in only, a user with no grants sees nothing."""
-    allowed_folders = pipeline_db.get_counties_for_user(email) if authenticated else []
+    has access to are loaded - either an explicit per-county grant
+    (user_county_access) or a whole-state grant (user_state_access, from
+    buying the state bundle) that covers every county in that state,
+    including ones added after the purchase. Access is opt-in only, a user
+    with no grants at all sees nothing."""
+    allowed_folders = get_allowed_county_folders(email) if authenticated else set()
     visible_counties = [c for c in COUNTIES if c["folder"] in allowed_folders]
 
     if authenticated:
@@ -2060,6 +2078,10 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True}, clear_cookie=True)
             return
 
+        if self.path == "/api/stripe-webhook":
+            self._handle_stripe_webhook(raw_body)
+            return
+
         if not get_session_email(self):
             self._send_json(401, {"error": "Not signed in."})
             return
@@ -2072,6 +2094,10 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 print(f"Unexpected error uploading PDF template: {e}")
                 status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
             self._send_json(status, response)
+            return
+
+        if self.path == "/api/create-checkout-session":
+            self._handle_create_checkout_session(raw_body)
             return
 
         handlers = {
@@ -2093,7 +2119,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         if self.path == "/api/send-letter":
             email = get_session_email(self)
             county = str(payload.get("county", "")).strip()
-            if county not in pipeline_db.get_counties_for_user(email):
+            if county not in get_allowed_county_folders(email):
                 self._send_json(403, {"error": "You don't have access to that county."})
                 return
 
@@ -2129,6 +2155,54 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
 
         token = create_session(signed_in_email)
         self._send_json(200, {"ok": True, "email": signed_in_email}, set_cookie=token)
+
+    def _base_url(self):
+        host = self.headers.get("Host", f"127.0.0.1:{PORT}")
+        scheme = "http" if host.startswith("127.0.0.1") or host.startswith("localhost") else "https"
+        return f"{scheme}://{host}"
+
+    def _handle_create_checkout_session(self, raw_body):
+        try:
+            payload = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON body"})
+            return
+
+        email = get_session_email(self)
+        kind = str(payload.get("kind", "")).strip()
+        key = str(payload.get("key", "")).strip()
+        if kind not in ("county", "state_bundle") or not key:
+            self._send_json(400, {"error": "Invalid plan."})
+            return
+
+        base_url = self._base_url()
+        try:
+            checkout_url = billing.create_checkout_session(
+                email, kind, key,
+                success_url=f"{base_url}/?checkout=success",
+                cancel_url=f"{base_url}/?checkout=cancel",
+            )
+        except billing.BillingError as e:
+            self._send_json(400, {"error": str(e)})
+            return
+
+        self._send_json(200, {"url": checkout_url})
+
+    def _handle_stripe_webhook(self, raw_body):
+        sig_header = self.headers.get("Stripe-Signature", "")
+        try:
+            event_type = billing.handle_webhook_event(raw_body, sig_header)
+        except billing.BillingError as e:
+            print(f"Stripe webhook rejected: {e}")
+            self._send_json(400, {"error": str(e)})
+            return
+        except Exception as e:
+            print(f"Unexpected error handling Stripe webhook: {e}")
+            self._send_json(500, {"error": "Unexpected server error."})
+            return
+
+        print(f"Stripe webhook handled: {event_type}")
+        self._send_json(200, {"received": True})
 
     def _send_json(self, status, payload, set_cookie=None, clear_cookie=False):
         body = json.dumps(payload).encode("utf-8")

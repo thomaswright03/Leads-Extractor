@@ -36,3 +36,43 @@ create table if not exists user_county_access (
     county text not null,
     unique (email, county)
 );
+
+-- Added 2026-07-27 (Stripe billing): a state-wide grant, separate from
+-- single-county grants above. Buying the whole-state bundle grants every
+-- county in that state, including ones added after the purchase - so this
+-- stores the state itself, not a snapshot of whichever counties exist today.
+create table if not exists user_state_access (
+    id bigint generated always as identity primary key,
+    email text not null,
+    state text not null,
+    unique (email, state)
+);
+
+-- What each plan costs and its corresponding Stripe Product/Price. kind is
+-- 'county' (key = county folder like 'slk') or 'state_bundle' (key = state
+-- abbreviation like 'UT').
+create table if not exists pricing_plans (
+    id bigint generated always as identity primary key,
+    kind text not null check (kind in ('county', 'state_bundle')),
+    key text not null,
+    label text not null,
+    monthly_price_cents integer not null,
+    stripe_product_id text,
+    stripe_price_id text,
+    unique (kind, key)
+);
+
+-- One row per Stripe subscription, so the webhook handler can look up what
+-- to grant/revoke from just the Stripe subscription/customer IDs an event
+-- carries - Stripe's webhook payloads don't include our own email/plan info
+-- unless we've recorded the mapping ourselves.
+create table if not exists subscriptions (
+    id bigint generated always as identity primary key,
+    email text not null,
+    kind text not null check (kind in ('county', 'state_bundle')),
+    key text not null,
+    stripe_customer_id text not null,
+    stripe_subscription_id text not null unique,
+    status text not null,
+    created_at timestamptz not null default now()
+);

@@ -129,8 +129,109 @@ def get_counties_for_user(email):
 
 
 def grant_county_access(email, county):
-    _get_client().table("user_county_access").insert(
-        {"email": email.strip().lower(), "county": county}
+    # upsert, not insert: Stripe webhooks can redeliver the same event, and
+    # a plain insert would crash on the (email, county) unique constraint
+    # the second time.
+    _get_client().table("user_county_access").upsert(
+        {"email": email.strip().lower(), "county": county}, on_conflict="email,county"
+    ).execute()
+
+
+def revoke_county_access(email, county):
+    _get_client().table("user_county_access").delete().eq(
+        "email", email.strip().lower()
+    ).eq("county", county).execute()
+
+
+def get_state_grants_for_user(email):
+    """State abbreviations (e.g. "UT") this email has whole-state access to,
+    from buying the state bundle rather than individual counties. The caller
+    (dashboard.py, which owns the COUNTIES list) is responsible for expanding
+    a state grant into the actual counties currently in that state - storing
+    the state itself here, not a snapshot of counties, is what makes a
+    state-bundle subscriber automatically get access to a county added later."""
+    if not email:
+        return []
+    result = (
+        _get_client()
+        .table("user_state_access")
+        .select("state")
+        .eq("email", email.strip().lower())
+        .execute()
+    )
+    return [row["state"] for row in result.data]
+
+
+def grant_state_access(email, state):
+    _get_client().table("user_state_access").upsert(
+        {"email": email.strip().lower(), "state": state}, on_conflict="email,state"
+    ).execute()
+
+
+def revoke_state_access(email, state):
+    _get_client().table("user_state_access").delete().eq(
+        "email", email.strip().lower()
+    ).eq("state", state).execute()
+
+
+def get_pricing_plans():
+    result = _get_client().table("pricing_plans").select("*").execute()
+    return result.data
+
+
+def get_pricing_plan(kind, key):
+    result = (
+        _get_client()
+        .table("pricing_plans")
+        .select("*")
+        .eq("kind", kind)
+        .eq("key", key)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def create_pricing_plan(kind, key, label, monthly_price_cents):
+    result = (
+        _get_client()
+        .table("pricing_plans")
+        .insert({"kind": kind, "key": key, "label": label, "monthly_price_cents": monthly_price_cents})
+        .execute()
+    )
+    return result.data[0]["id"]
+
+
+def set_pricing_plan_stripe_ids(kind, key, stripe_product_id, stripe_price_id):
+    _get_client().table("pricing_plans").update(
+        {"stripe_product_id": stripe_product_id, "stripe_price_id": stripe_price_id}
+    ).eq("kind", kind).eq("key", key).execute()
+
+
+def record_subscription(email, kind, key, stripe_customer_id, stripe_subscription_id, status):
+    _get_client().table("subscriptions").upsert({
+        "email": email.strip().lower(),
+        "kind": kind,
+        "key": key,
+        "stripe_customer_id": stripe_customer_id,
+        "stripe_subscription_id": stripe_subscription_id,
+        "status": status,
+    }, on_conflict="stripe_subscription_id").execute()
+
+
+def get_subscription_by_stripe_id(stripe_subscription_id):
+    result = (
+        _get_client()
+        .table("subscriptions")
+        .select("*")
+        .eq("stripe_subscription_id", stripe_subscription_id)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def update_subscription_status(stripe_subscription_id, status):
+    _get_client().table("subscriptions").update({"status": status}).eq(
+        "stripe_subscription_id", stripe_subscription_id
     ).execute()
 
 
