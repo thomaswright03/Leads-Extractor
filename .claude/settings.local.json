@@ -122,7 +122,14 @@
       "Bash(curl -s -b /tmp/_cty_cookies.txt http://127.0.0.1:8765/ -o /tmp/_cty_page_noaccess.html)",
       "Bash(curl -s -c /tmp/_thomasjr_cookies.txt -X POST http://127.0.0.1:8765/api/login -H 'Content-Type: application/json' -d '{\"email\":\"thomasjr@leads.extractor\",\"password\":\"REPLACE\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
       "Bash(kill 48204)",
-      "Bash(rm -f /tmp/_cty_*.html /tmp/_cty_cookies.txt /tmp/_thomasjr_cookies.txt)"
+      "Bash(rm -f /tmp/_cty_*.html /tmp/_cty_cookies.txt /tmp/_thomasjr_cookies.txt)",
+      "Bash(python3 -c \"import openpyxl; print\\('openpyxl', openpyxl.__version__\\)\")",
+      "Bash(python3 -c \"import pandas; print\\('pandas', pandas.__version__\\)\")",
+      "Bash(python3 -c \"import pypdfium2; print\\(getattr\\(pypdfium2, '__version__', 'unknown'\\)\\)\")",
+      "Bash(rm -rf /tmp/render_test_venv)",
+      "Bash(curl -s http://127.0.0.1:10000/ -o /tmp/_render_sim_page.html -w \"HTTP %{http_code}, %{size_download} bytes\\\\n\")",
+      "Bash(kill 60480)",
+      "Bash(rm -f /tmp/_render_sim_page.html /tmp/_render_sim_test.log)"
     ]
   }
 }

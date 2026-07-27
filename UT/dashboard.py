@@ -2159,17 +2159,29 @@ def main():
     with open(OUTPUT_PATH, "w") as f:
         f.write(build_dashboard_html(authenticated=False))
 
+    # Render (and most PaaS hosts) set PORT and expect the app to bind to
+    # 0.0.0.0 so it's reachable from outside the container. Locally, no PORT
+    # is set, so this keeps behaving exactly as before: 127.0.0.1:8765 with
+    # the browser auto-opened.
+    is_hosted = "PORT" in os.environ
+    host = "0.0.0.0" if is_hosted else "127.0.0.1"
+    port = int(os.environ.get("PORT", PORT))
+
     try:
-        server = http.server.HTTPServer(("127.0.0.1", PORT), DashboardRequestHandler)
+        # ThreadingHTTPServer instead of plain HTTPServer so one slow
+        # request (e.g. a PDF render) doesn't block every other user -
+        # matters once this has real concurrent traffic, not just one operator.
+        server = http.server.ThreadingHTTPServer((host, port), DashboardRequestHandler)
     except OSError as e:
-        print(f"Couldn't start the dashboard server on port {PORT}: {e}")
+        print(f"Couldn't start the dashboard server on port {port}: {e}")
         print("Is dashboard.py already running in another terminal? If so, just refresh that browser tab.")
         raise SystemExit(1)
 
-    url = f"http://127.0.0.1:{PORT}/"
+    url = f"http://{'127.0.0.1' if not is_hosted else host}:{port}/"
     print(f"Dashboard live at {url} - refresh the page any time to see the latest data.")
     print("Press Ctrl+C to stop.")
-    webbrowser.open(url)
+    if not is_hosted:
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
