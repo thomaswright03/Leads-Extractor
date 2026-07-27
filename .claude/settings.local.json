@@ -114,7 +114,15 @@
       "Bash(curl -s -b /tmp/_auth_cookies.txt -c /tmp/_auth_cookies.txt -X POST http://127.0.0.1:8765/api/logout -w \"\\\\nHTTP %{http_code}\\\\n\")",
       "Bash(curl -s -b /tmp/_auth_cookies.txt http://127.0.0.1:8765/ -o /tmp/_auth_after_logout.html)",
       "Bash(kill 34432)",
-      "Bash(rm -f /tmp/_auth_*.html /tmp/_auth_cookies.txt)"
+      "Bash(rm -f /tmp/_auth_*.html /tmp/_auth_cookies.txt)",
+      "Bash(ps -p 36067 -o pid,lstart,command)",
+      "Bash(kill 36067)",
+      "Bash(curl -s -b /tmp/_cty_cookies.txt -X POST http://127.0.0.1:8765/api/send-letter -H 'Content-Type: application/json' -d '{\"fullName\":\"Test\",\"county\":\"uta\",\"address\":\"1 St\",\"city\":\"Provo\",\"state\":\"UT\",\"zip\":\"84601\",\"templateId\":\"probate-inquiry\",\"message\":\"test\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/_cty_cookies.txt -X POST http://127.0.0.1:8765/api/send-letter -H 'Content-Type: application/json' -d '{\"fullName\":\"Test\",\"county\":\"slk\",\"address\":\"1 St\",\"city\":\"Salt Lake City\",\"state\":\"UT\",\"zip\":\"84101\",\"templateId\":\"probate-inquiry\",\"message\":\"test\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/_cty_cookies.txt http://127.0.0.1:8765/ -o /tmp/_cty_page_noaccess.html)",
+      "Bash(curl -s -c /tmp/_thomasjr_cookies.txt -X POST http://127.0.0.1:8765/api/login -H 'Content-Type: application/json' -d '{\"email\":\"thomasjr@leads.extractor\",\"password\":\"REPLACE\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(kill 48204)",
+      "Bash(rm -f /tmp/_cty_*.html /tmp/_cty_cookies.txt /tmp/_thomasjr_cookies.txt)"
     ]
   }
 }

@@ -561,11 +561,11 @@
       <div class="mark"></div>
       <div>
         <h1>Probate Property Leads</h1>
-        <p>Salt Lake County & Utah County &middot; deceased-owner match report</p>
+        <p>Sign in to view &middot; deceased-owner match report</p>
       </div>
     </div>
     <div class="generated">
-      Generated July 27, 2026 at 2:54 PM
+      Generated July 27, 2026 at 3:15 PM
       <span style="margin-left:10px;"></span>
       <a href="#" id="logout-link" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline; cursor: pointer;">Log Out</a>
     </div>
@@ -724,7 +724,7 @@
   Generated locally from pipeline_cache.db &middot; parcel and obituary links open the original source for verification before contacting anyone.
 </footer>
 
-<script id="lead-data" type="application/json">{"confirmed": [], "templates": [{"id": "probate-inquiry", "name": "Probate Inquiry", "body": "Dear {{owner_name}},\n\nI'm reaching out regarding the property at {{address}}, {{city}}, {{state}} {{zip}}, which I understand may be part of an estate following the passing of {{full_name}}. Please accept my condolences.\n\nIf you are the person handling this property, I'd like to discuss options that might make this process easier for you, including a straightforward cash purchase with no repairs or listing required.\n\nFeel free to reach out whenever is convenient - there's no obligation.\n\nSincerely,"}, {"id": "cash-offer", "name": "Cash Offer", "body": "Dear {{owner_name}},\n\nI'm interested in purchasing the property at {{address}}, {{city}}, {{state}} {{zip}} for cash, as-is, on a timeline that works for you.\n\nNo repairs, no showings, no realtor commissions - just a simple, fast closing if it's something you'd consider.\n\nI'd welcome the chance to talk whenever you're ready.\n\nSincerely,"}], "pdfTemplates": [], "counties": [{"folder": "slk", "label": "Salt Lake County"}, {"folder": "uta", "label": "Utah County"}]}</script>
+<script id="lead-data" type="application/json">{"confirmed": [], "templates": [{"id": "probate-inquiry", "name": "Probate Inquiry", "body": "Dear {{owner_name}},\n\nI'm reaching out regarding the property at {{address}}, {{city}}, {{state}} {{zip}}, which I understand may be part of an estate following the passing of {{full_name}}. Please accept my condolences.\n\nIf you are the person handling this property, I'd like to discuss options that might make this process easier for you, including a straightforward cash purchase with no repairs or listing required.\n\nFeel free to reach out whenever is convenient - there's no obligation.\n\nSincerely,"}, {"id": "cash-offer", "name": "Cash Offer", "body": "Dear {{owner_name}},\n\nI'm interested in purchasing the property at {{address}}, {{city}}, {{state}} {{zip}} for cash, as-is, on a timeline that works for you.\n\nNo repairs, no showings, no realtor commissions - just a simple, fast closing if it's something you'd consider.\n\nI'd welcome the chance to talk whenever you're ready.\n\nSincerely,"}], "pdfTemplates": [], "counties": []}</script>
 <script>
   const leadData = JSON.parse(document.getElementById('lead-data').textContent);
   const confirmed = leadData.confirmed;

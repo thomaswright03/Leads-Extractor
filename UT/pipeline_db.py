@@ -112,6 +112,28 @@ def record_letter_sent(county, full_name, owner_name, parcel_id, template_id, me
     }).execute()
 
 
+def get_counties_for_user(email):
+    """County folder keys (e.g. "slk", "uta") this email is allowed to see -
+    empty list means no access at all. Access is opt-in only: a user with no
+    rows in user_county_access sees nothing, nothing is open by default."""
+    if not email:
+        return []
+    result = (
+        _get_client()
+        .table("user_county_access")
+        .select("county")
+        .eq("email", email.strip().lower())
+        .execute()
+    )
+    return [row["county"] for row in result.data]
+
+
+def grant_county_access(email, county):
+    _get_client().table("user_county_access").insert(
+        {"email": email.strip().lower(), "county": county}
+    ).execute()
+
+
 def get_latest_letters_sent():
     """Latest send attempt per (county, full_name, parcel_id), keyed the same
     way dashboard.py keys its merged, multi-county confirmed-leads list."""

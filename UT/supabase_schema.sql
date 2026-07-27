@@ -26,3 +26,13 @@ create table if not exists letters_sent (
     error text,
     sent_at timestamptz not null default now()
 );
+
+-- Added 2026-07-27: which counties each logged-in user (by email) is allowed
+-- to see/send letters for. A user with zero rows here has no county access
+-- at all - access must be explicitly granted, nothing is open by default.
+create table if not exists user_county_access (
+    id bigint generated always as identity primary key,
+    email text not null,
+    county text not null,
+    unique (email, county)
+);

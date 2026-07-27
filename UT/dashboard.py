@@ -330,10 +330,12 @@ def load_confirmed_leads_from_excel(county):
     return list(leads_by_key.values())
 
 
-def load_all_confirmed_leads():
-    """Every confirmed lead across every county in COUNTIES, in one flat list."""
+def load_all_confirmed_leads(counties):
+    """Every confirmed lead across the given counties (a subset of COUNTIES -
+    normally just whichever ones the logged-in user has access to), in one
+    flat list."""
     leads = []
-    for county in COUNTIES:
+    for county in counties:
         leads.extend(load_confirmed_leads_from_excel(county))
     return leads
 
@@ -988,7 +990,7 @@ TEMPLATE = """<!doctype html>
       </thead>
       <tbody id="confirmed-body"></tbody>
     </table>
-    <div class="empty" id="confirmed-empty" style="display:none;">No confirmed leads yet &mdash; run the pipeline to populate this list.</div>
+    <div class="empty" id="confirmed-empty" style="display:none;">__CONFIRMED_EMPTY_MESSAGE__</div>
   </div>
 </main>
 
@@ -1816,9 +1818,14 @@ def build_dashboard_html(authenticated=False, email=None):
     When not authenticated, none of the real lead/mailing data is loaded or
     embedded in the response at all - only the login screen is meaningful,
     so there's nothing for an unauthenticated request to read out of the
-    page source either."""
+    page source either. When authenticated, only the counties this email
+    has been explicitly granted (via user_county_access) are loaded -
+    access is opt-in only, a user with no grants sees nothing."""
+    allowed_folders = pipeline_db.get_counties_for_user(email) if authenticated else []
+    visible_counties = [c for c in COUNTIES if c["folder"] in allowed_folders]
+
     if authenticated:
-        confirmed_leads = load_all_confirmed_leads()
+        confirmed_leads = load_all_confirmed_leads(visible_counties)
         confirmed_count = len(confirmed_leads)
 
         letters_sent = pipeline_db.get_latest_letters_sent()
@@ -1847,7 +1854,7 @@ def build_dashboard_html(authenticated=False, email=None):
     else:
         confirmed_leads, confirmed_count, lead_pursued_rate, pdf_templates = [], 0, "", []
 
-    counties = [{"folder": c["folder"], "label": c["label"]} for c in COUNTIES]
+    counties = [{"folder": c["folder"], "label": c["label"]} for c in visible_counties]
     lead_data = {
         "confirmed": confirmed_leads,
         "templates": LETTER_TEMPLATES,
@@ -1855,17 +1862,28 @@ def build_dashboard_html(authenticated=False, email=None):
         "counties": counties,
     }
 
-    county_labels = [c["label"] for c in COUNTIES]
-    if len(county_labels) <= 3:
-        counties_subtitle = " & ".join(county_labels)
+    if not authenticated:
+        counties_subtitle = "Sign in to view"
+    elif not visible_counties:
+        counties_subtitle = "No county access assigned"
     else:
-        counties_subtitle = f"{len(county_labels)} Utah Counties"
+        county_labels = [c["label"] for c in visible_counties]
+        counties_subtitle = " & ".join(county_labels) if len(county_labels) <= 3 else f"{len(county_labels)} Utah Counties"
+
+    if authenticated and not visible_counties:
+        confirmed_empty_message = (
+            "Your account doesn&rsquo;t have access to any counties yet &mdash; "
+            "contact your administrator to get access."
+        )
+    else:
+        confirmed_empty_message = "No confirmed leads yet &mdash; run the pipeline to populate this list."
 
     return (TEMPLATE
         .replace("__GENERATED_AT__", datetime.now().strftime("%B %d, %Y at %-I:%M %p"))
         .replace("__CONFIRMED_COUNT__", str(confirmed_count))
         .replace("__LEAD_PURSUED_RATE__", lead_pursued_rate)
         .replace("__COUNTIES_SUBTITLE__", counties_subtitle)
+        .replace("__CONFIRMED_EMPTY_MESSAGE__", confirmed_empty_message)
         .replace("__SERVER_AUTHENTICATED__", "true" if authenticated else "false")
         .replace("__USER_EMAIL__", html.escape(email or ""))
         .replace("__LEAD_DATA_JSON__", json.dumps(lead_data))
@@ -2071,6 +2089,13 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._send_json(400, {"error": "Invalid JSON body"})
             return
+
+        if self.path == "/api/send-letter":
+            email = get_session_email(self)
+            county = str(payload.get("county", "")).strip()
+            if county not in pipeline_db.get_counties_for_user(email):
+                self._send_json(403, {"error": "You don't have access to that county."})
+                return
 
         try:
             status, response = handler(payload)
