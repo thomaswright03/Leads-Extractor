@@ -1,14 +1,18 @@
 import html
+import http.cookies
 import http.server
 import json
 import os
 import re
+import secrets
+import time
 import uuid
 import webbrowser
 from datetime import datetime
 
 import pandas as pd
 
+import auth
 import mailer
 import pdf_merge
 import pipeline_db
@@ -17,6 +21,48 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(SCRIPT_DIR, "dashboard.html")
 PDF_TEMPLATES_DIR = os.path.join(SCRIPT_DIR, "pdf_templates")
 PORT = 8765
+
+# In-memory session store (session_token -> {"email", "expires_at"}). Lives
+# only as long as this process - a restart just means everyone logs in
+# again, which is fine for how this tool is actually used. Real credentials
+# live in Supabase Auth; this only tracks which browser has already proven
+# it knows one.
+SESSIONS = {}
+SESSION_COOKIE_NAME = "session"
+SESSION_DURATION_SECONDS = 60 * 60 * 24
+
+
+def create_session(email):
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = {"email": email, "expires_at": time.time() + SESSION_DURATION_SECONDS}
+    return token
+
+
+def get_session_email(handler):
+    cookie_header = handler.headers.get("Cookie", "")
+    if not cookie_header:
+        return None
+    jar = http.cookies.SimpleCookie()
+    jar.load(cookie_header)
+    morsel = jar.get(SESSION_COOKIE_NAME)
+    if not morsel:
+        return None
+    session = SESSIONS.get(morsel.value)
+    if not session or session["expires_at"] < time.time():
+        SESSIONS.pop(morsel.value, None)
+        return None
+    return session["email"]
+
+
+def destroy_session(handler):
+    cookie_header = handler.headers.get("Cookie", "")
+    if not cookie_header:
+        return
+    jar = http.cookies.SimpleCookie()
+    jar.load(cookie_header)
+    morsel = jar.get(SESSION_COOKIE_NAME)
+    if morsel:
+        SESSIONS.pop(morsel.value, None)
 
 # Preset letter layouts. {{merge_fields}} are substituted client-side (so the
 # user can preview/edit the merged text before sending) and again
@@ -858,7 +904,11 @@ TEMPLATE = """<!doctype html>
         <p>__COUNTIES_SUBTITLE__ &middot; deceased-owner match report</p>
       </div>
     </div>
-    <div class="generated">Generated __GENERATED_AT__</div>
+    <div class="generated">
+      Generated __GENERATED_AT__
+      <span style="margin-left:10px;">__USER_EMAIL__</span>
+      <a href="#" id="logout-link" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline; cursor: pointer;">Log Out</a>
+    </div>
   </div>
 </header>
 
@@ -1701,12 +1751,13 @@ TEMPLATE = """<!doctype html>
 </div>
 
 <script>
-  // NOTE: this is a client-side gate on a static local file, not real
-  // access control - the credentials below are visible to anyone who views
-  // the page source. It just keeps the report from being open by default.
-  const VALID_EMAIL = "thomasjr@leads.extractor";
-  const VALID_PASSWORD = "239184";
-  const SESSION_KEY = "probateLeadsAuthed";
+  // Real auth: the server decides __SERVER_AUTHENTICATED__ based on a
+  // session cookie it issued after a successful /api/login call, which
+  // itself checks the password against Supabase Auth. Unauthenticated
+  // responses never embed real lead/mailing data in the page at all (see
+  // build_dashboard_html's authenticated=False branch), so there's nothing
+  // sensitive to find in the page source before logging in.
+  const SERVER_AUTHENTICATED = __SERVER_AUTHENTICATED__;
 
   const loginScreen = document.getElementById('login-screen');
   const appContent = document.getElementById('app-content');
@@ -1718,22 +1769,38 @@ TEMPLATE = """<!doctype html>
     appContent.style.display = 'block';
   }
 
-  if (sessionStorage.getItem(SESSION_KEY) === 'true') {
+  if (SERVER_AUTHENTICATED) {
     unlock();
   }
 
-  loginForm.addEventListener('submit', (e) => {
+  loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
-    if (email === VALID_EMAIL && password === VALID_PASSWORD) {
-      sessionStorage.setItem(SESSION_KEY, 'true');
-      loginError.classList.remove('show');
-      unlock();
-    } else {
+    loginError.classList.remove('show');
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Sign in failed.');
+      window.location.reload();
+    } catch (err) {
+      loginError.textContent = err.message;
       loginError.classList.add('show');
     }
   });
+
+  const logoutLink = document.getElementById('logout-link');
+  if (logoutLink) {
+    logoutLink.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.reload();
+    });
+  }
 </script>
 
 </body>
@@ -1741,36 +1808,45 @@ TEMPLATE = """<!doctype html>
 """
 
 
-def build_dashboard_html():
+def build_dashboard_html(authenticated=False, email=None):
     """Re-reads the dated xlsx files and rebuilds the page fresh - called on
     every request so a browser refresh always reflects the latest exports,
-    with no need to re-run this script."""
-    confirmed_leads = load_all_confirmed_leads()
-    confirmed_count = len(confirmed_leads)
+    with no need to re-run this script.
 
-    letters_sent = pipeline_db.get_latest_letters_sent()
-    for lead in confirmed_leads:
-        letter = letters_sent.get((lead["countyFolder"], lead["fullName"], lead["parcelId"]))
-        lead["letter"] = letter or None
+    When not authenticated, none of the real lead/mailing data is loaded or
+    embedded in the response at all - only the login screen is meaningful,
+    so there's nothing for an unauthenticated request to read out of the
+    page source either."""
+    if authenticated:
+        confirmed_leads = load_all_confirmed_leads()
+        confirmed_count = len(confirmed_leads)
 
-    # Lead Pursued Rate = % of confirmed leads that have at least one
-    # successfully sent letter on record.
-    sent_count = sum(1 for lead in confirmed_leads if lead["letter"] and lead["letter"]["status"] == "sent")
-    lead_pursued_rate = f"{round(100 * sent_count / confirmed_count)}%" if confirmed_count else ""
+        letters_sent = pipeline_db.get_latest_letters_sent()
+        for lead in confirmed_leads:
+            letter = letters_sent.get((lead["countyFolder"], lead["fullName"], lead["parcelId"]))
+            lead["letter"] = letter or None
 
-    pdf_templates = [
-        {
-            "id": f"pdf:{t['id']}",
-            "rawId": t["id"],
-            "name": f"{t['companyName']} — {t['templateName']}",
-            "company": t["companyName"],
-            "templateName": t["templateName"],
-            "filename": t["filename"],
-            "fieldPositions": t["fieldPositions"],
-            "uploadedAt": t["uploadedAt"],
-        }
-        for t in pipeline_db.get_pdf_templates()
-    ]
+        # Lead Pursued Rate = % of confirmed leads that have at least one
+        # successfully sent letter on record.
+        sent_count = sum(1 for lead in confirmed_leads if lead["letter"] and lead["letter"]["status"] == "sent")
+        lead_pursued_rate = f"{round(100 * sent_count / confirmed_count)}%" if confirmed_count else ""
+
+        pdf_templates = [
+            {
+                "id": f"pdf:{t['id']}",
+                "rawId": t["id"],
+                "name": f"{t['companyName']} — {t['templateName']}",
+                "company": t["companyName"],
+                "templateName": t["templateName"],
+                "filename": t["filename"],
+                "fieldPositions": t["fieldPositions"],
+                "uploadedAt": t["uploadedAt"],
+            }
+            for t in pipeline_db.get_pdf_templates()
+        ]
+    else:
+        confirmed_leads, confirmed_count, lead_pursued_rate, pdf_templates = [], 0, "", []
+
     counties = [{"folder": c["folder"], "label": c["label"]} for c in COUNTIES]
     lead_data = {
         "confirmed": confirmed_leads,
@@ -1790,6 +1866,8 @@ def build_dashboard_html():
         .replace("__CONFIRMED_COUNT__", str(confirmed_count))
         .replace("__LEAD_PURSUED_RATE__", lead_pursued_rate)
         .replace("__COUNTIES_SUBTITLE__", counties_subtitle)
+        .replace("__SERVER_AUTHENTICATED__", "true" if authenticated else "false")
+        .replace("__USER_EMAIL__", html.escape(email or ""))
         .replace("__LEAD_DATA_JSON__", json.dumps(lead_data))
     )
 
@@ -1895,6 +1973,9 @@ def handle_send_letter(payload):
 class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/pdf-templates/"):
+            if not get_session_email(self):
+                self._send_json(401, {"error": "Not signed in."})
+                return
             rest = self.path[len("/pdf-templates/"):]
             if rest.endswith("/preview.png"):
                 self._serve_pdf_template_preview(rest[: -len("/preview.png")])
@@ -1902,7 +1983,8 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._serve_pdf_template(rest)
             return
 
-        body = build_dashboard_html().encode("utf-8")
+        email = get_session_email(self)
+        body = build_dashboard_html(authenticated=bool(email), email=email).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -1951,6 +2033,19 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         raw_body = self.rfile.read(length) if length else b""
 
+        if self.path == "/api/login":
+            self._handle_login(raw_body)
+            return
+
+        if self.path == "/api/logout":
+            destroy_session(self)
+            self._send_json(200, {"ok": True}, clear_cookie=True)
+            return
+
+        if not get_session_email(self):
+            self._send_json(401, {"error": "Not signed in."})
+            return
+
         if self.path == "/api/upload-pdf-template":
             fields = _parse_multipart(self.headers.get("Content-Type", ""), raw_body)
             try:
@@ -1985,11 +2080,43 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
 
         self._send_json(status, response)
 
-    def _send_json(self, status, payload):
+    def _handle_login(self, raw_body):
+        try:
+            payload = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON body"})
+            return
+
+        email = str(payload.get("email", "")).strip()
+        password = str(payload.get("password", ""))
+        if not email or not password:
+            self._send_json(400, {"error": "Email and password are required."})
+            return
+
+        try:
+            signed_in_email, _ = auth.sign_in(email, password)
+        except auth.LoginError:
+            self._send_json(401, {"error": "Incorrect email or password."})
+            return
+        except RuntimeError as e:
+            self._send_json(500, {"error": str(e)})
+            return
+
+        token = create_session(signed_in_email)
+        self._send_json(200, {"ok": True, "email": signed_in_email}, set_cookie=token)
+
+    def _send_json(self, status, payload, set_cookie=None, clear_cookie=False):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if set_cookie:
+            self.send_header(
+                "Set-Cookie",
+                f"{SESSION_COOKIE_NAME}={set_cookie}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_DURATION_SECONDS}",
+            )
+        if clear_cookie:
+            self.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0")
         self.end_headers()
         self.wfile.write(body)
 
@@ -2000,11 +2127,12 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    # Also write a static snapshot to disk, for reference / opening without
-    # the server running - but the server below is the primary way to view
-    # this now, since it rebuilds from the xlsx files on every request.
+    # Also write a static snapshot to disk - login-screen only, no real
+    # data embedded, since a plain file on disk can't enforce the server's
+    # session check. Open http://127.0.0.1:8765/ (with the server running)
+    # to actually sign in and see real data.
     with open(OUTPUT_PATH, "w") as f:
-        f.write(build_dashboard_html())
+        f.write(build_dashboard_html(authenticated=False))
 
     try:
         server = http.server.HTTPServer(("127.0.0.1", PORT), DashboardRequestHandler)

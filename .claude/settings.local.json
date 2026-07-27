@@ -103,7 +103,18 @@
       "Bash(python3 -c \"import supabase; print\\('installed', supabase.__version__\\)\")",
       "Bash(curl -s -o /tmp/_ut_dashboard_supabase_page.html -w \"HTTP %{http_code}, %{size_download} bytes\\\\n\" http://127.0.0.1:8765/)",
       "Bash(kill 17029)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(ps -p 23010 -o pid,lstart,command)",
+      "Bash(kill 23010)",
+      "Bash(curl -s http://127.0.0.1:8765/ -o /tmp/_auth_unauth.html)",
+      "Bash(curl -s -X POST http://127.0.0.1:8765/api/login -H 'Content-Type: application/json' -d '{\"email\":\"dashboard-auth-test@example.com\",\"password\":\"wrongpassword\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -c /tmp/_auth_cookies.txt -X POST http://127.0.0.1:8765/api/login -H 'Content-Type: application/json' -d '{\"email\":\"dashboard-auth-test@example.com\",\"password\":\"TestPass123!verify\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/_auth_cookies.txt http://127.0.0.1:8765/ -o /tmp/_auth_authed.html)",
+      "Bash(curl -s http://127.0.0.1:8765/api/send-letter -X POST -H \"Content-Type: application/json\" -d '{}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b /tmp/_auth_cookies.txt -c /tmp/_auth_cookies.txt -X POST http://127.0.0.1:8765/api/logout -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -b /tmp/_auth_cookies.txt http://127.0.0.1:8765/ -o /tmp/_auth_after_logout.html)",
+      "Bash(kill 34432)",
+      "Bash(rm -f /tmp/_auth_*.html /tmp/_auth_cookies.txt)"
     ]
   }
 }
