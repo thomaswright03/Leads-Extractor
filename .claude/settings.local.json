@@ -93,7 +93,17 @@
       "Bash(kill 83147)",
       "Bash(python3 \"/Users/ssirstaff/Desktop/untitled folder/UT/dashboard.py\")",
       "Bash(pkill -f \"UT/dashboard.py\")",
-      "Bash(echo \"---exit: $?---\")"
+      "Bash(echo \"---exit: $?---\")",
+      "Bash(grep -n '</header>\\\\|<main>\\\\|class=\"stats\"\\\\|</div>\\\\s*$' \"/Users/ssirstaff/Desktop/untitled folder/UT/dashboard.py\")",
+      "Bash(curl -s http://127.0.0.1:8765/)",
+      "Bash(ps -p 98617 -o pid,lstart,command)",
+      "Bash(kill 98617)",
+      "Bash(kill 7034)",
+      "Bash(pip3 show *)",
+      "Bash(python3 -c \"import supabase; print\\('installed', supabase.__version__\\)\")",
+      "Bash(curl -s -o /tmp/_ut_dashboard_supabase_page.html -w \"HTTP %{http_code}, %{size_download} bytes\\\\n\" http://127.0.0.1:8765/)",
+      "Bash(kill 17029)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }
