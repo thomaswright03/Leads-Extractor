@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -11,21 +12,33 @@ from urllib.parse import urlparse, parse_qs
 import pipeline_db
 import geocode
 
-CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME_BINARY_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium-browser",
+    "chromium",
+]
 
 
 def detect_chrome_major_version():
     """undetected_chromedriver's own version auto-detection can grab a
     ChromeDriver build that's newer than the actually installed Chrome,
     which breaks the session entirely. Pin it to the real installed major
-    version instead - same fix DC.py uses."""
-    try:
-        output = subprocess.check_output([CHROME_BINARY, "--version"], text=True)
-        match = re.search(r"(\d+)\.", output)
-        if match:
-            return int(match.group(1))
-    except Exception:
-        pass
+    version instead - same fix DC.py uses. Tries macOS's fixed app path
+    first, then whatever Chrome/Chromium binary is on PATH (e.g. Linux CI
+    runners)."""
+    for candidate in CHROME_BINARY_CANDIDATES:
+        binary = shutil.which(candidate)
+        if not binary:
+            continue
+        try:
+            output = subprocess.check_output([binary, "--version"], text=True)
+            match = re.search(r"(\d+)\.", output)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            continue
     return None
 
 

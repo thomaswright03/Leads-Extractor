@@ -2,6 +2,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -16,7 +17,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 import pipeline_db
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME_BINARY_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium-browser",
+    "chromium",
+]
 
 # Written by DC.py at the end of its run - lists exactly the file(s) it just
 # produced, so pricer.py doesn't have to guess from today's date.
@@ -38,14 +45,20 @@ def detect_chrome_major_version():
     """undetected_chromedriver's own version auto-detection can grab a
     ChromeDriver build newer than the actually installed Chrome, which
     breaks the session entirely - pin it to the real installed major
-    version instead. Same as DC.py's helper of the same name."""
-    try:
-        output = subprocess.check_output([CHROME_BINARY, "--version"], text=True)
-        match = re.search(r"(\d+)\.", output)
-        if match:
-            return int(match.group(1))
-    except Exception:
-        pass
+    version instead. Same as DC.py's helper of the same name. Tries
+    macOS's fixed app path first, then whatever Chrome/Chromium binary
+    is on PATH (e.g. Linux CI runners)."""
+    for candidate in CHROME_BINARY_CANDIDATES:
+        binary = shutil.which(candidate)
+        if not binary:
+            continue
+        try:
+            output = subprocess.check_output([binary, "--version"], text=True)
+            match = re.search(r"(\d+)\.", output)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            continue
     return None
 
 
