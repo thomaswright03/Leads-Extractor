@@ -2613,12 +2613,17 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "Invalid plan selected."})
             return
 
+        if not pipeline_db.is_email_invited(email):
+            self._send_json(403, {"error": "This email hasn't been invited yet. Contact us for access."})
+            return
+
         try:
             signed_up_email = auth.sign_up(email, password)
         except auth.SignupError as e:
             self._send_json(400, {"error": str(e)})
             return
 
+        pipeline_db.mark_invite_redeemed(signed_up_email)
         pipeline_db.set_mailing_profile(
             signed_up_email, from_name, from_address1, from_address2, from_city, from_state, from_zip,
         )

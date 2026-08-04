@@ -16,6 +16,7 @@ see supabase_schema.sql in this same folder; run it once in the Supabase
 SQL Editor before this module is used.
 """
 import os
+from datetime import datetime, timezone
 
 from supabase import create_client
 
@@ -261,6 +262,27 @@ def set_mailing_profile(email, from_name, from_address1, from_address2, from_cit
         "from_state": from_state,
         "from_zip": from_zip,
     }, on_conflict="email").execute()
+
+
+def is_email_invited(email):
+    """Gate for the public signup form: only emails added by hand to
+    invited_emails (Supabase Table Editor) are allowed to create an account."""
+    if not email:
+        return False
+    result = (
+        _get_client()
+        .table("invited_emails")
+        .select("email")
+        .eq("email", email.strip().lower())
+        .execute()
+    )
+    return bool(result.data)
+
+
+def mark_invite_redeemed(email):
+    _get_client().table("invited_emails").update(
+        {"redeemed_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("email", email.strip().lower()).execute()
 
 
 def get_latest_letters_sent():

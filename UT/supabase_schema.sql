@@ -91,3 +91,15 @@ create table if not exists user_mailing_profile (
     from_state text not null,
     from_zip text not null
 );
+
+-- Added 2026-08-04 (invite-only signup): the public signup form only creates
+-- an account if the email is listed here first. Add rows by hand in the
+-- Supabase Table Editor, same pattern already used for admin-added accounts.
+-- redeemed_at is set once the invite is used - purely for visibility, since
+-- Supabase Auth's own unique-email constraint is what actually stops reuse.
+create table if not exists invited_emails (
+    id bigint generated always as identity primary key,
+    email text not null unique,
+    invited_at timestamptz not null default now(),
+    redeemed_at timestamptz
+);
