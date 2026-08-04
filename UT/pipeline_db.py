@@ -144,6 +144,28 @@ def revoke_county_access(email, county):
     ).eq("county", county).execute()
 
 
+def get_taken_counties():
+    """Folder keys of every county that currently has an owner. Under the
+    one-agent-per-county model, a county in this set can't be sold to
+    anyone else until its current owner's access is revoked."""
+    result = _get_client().table("user_county_access").select("county").execute()
+    return {row["county"] for row in result.data}
+
+
+def get_county_owner(county):
+    """Email of the agent currently holding exclusive access to this
+    county, or None if it's unclaimed."""
+    result = (
+        _get_client()
+        .table("user_county_access")
+        .select("email")
+        .eq("county", county)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0]["email"] if result.data else None
+
+
 def get_state_grants_for_user(email):
     """State abbreviations (e.g. "UT") this email has whole-state access to,
     from buying the state bundle rather than individual counties. The caller

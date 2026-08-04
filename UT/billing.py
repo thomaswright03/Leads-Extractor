@@ -125,12 +125,25 @@ def handle_webhook_event(payload_bytes, sig_header):
         key = metadata.get("key")
         subscription_id = obj.get("subscription")
         customer_id = obj.get("customer")
-        if email and kind and key and subscription_id:
-            pipeline_db.record_subscription(email, kind, key, customer_id, subscription_id, "active")
-            if kind == "county":
+        if email and kind == "county" and key and subscription_id:
+            # Belt-and-suspenders re-check: the /api endpoints already block
+            # buying a taken county, but two checkouts for the same county
+            # could still race each other between session creation and this
+            # webhook firing. Whoever's webhook lands first wins the county;
+            # the loser's payment is recorded but access is withheld, and
+            # this print is the (deliberately manual) signal to go cancel/
+            # refund it in Stripe.
+            existing_owner = pipeline_db.get_county_owner(key)
+            if existing_owner and existing_owner != email.strip().lower():
+                print(
+                    f"WARNING: county '{key}' is already owned by {existing_owner}; "
+                    f"{email}'s payment (subscription {subscription_id}) was NOT granted "
+                    f"access. Cancel/refund that subscription in Stripe manually."
+                )
+                pipeline_db.record_subscription(email, kind, key, customer_id, subscription_id, "conflict")
+            else:
+                pipeline_db.record_subscription(email, kind, key, customer_id, subscription_id, "active")
                 pipeline_db.grant_county_access(email, key)
-            elif kind == "state_bundle":
-                pipeline_db.grant_state_access(email, key)
 
     elif event_type == "customer.subscription.deleted":
         subscription_id = obj["id"]
@@ -139,6 +152,7 @@ def handle_webhook_event(payload_bytes, sig_header):
             pipeline_db.update_subscription_status(subscription_id, "canceled")
             if record["kind"] == "county":
                 pipeline_db.revoke_county_access(record["email"], record["key"])
+                print(f"County '{record['key']}' is now available again (previously held by {record['email']}).")
             elif record["kind"] == "state_bundle":
                 pipeline_db.revoke_state_access(record["email"], record["key"])
 

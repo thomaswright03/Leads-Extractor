@@ -2269,9 +2269,14 @@ def build_dashboard_html(authenticated=False, email=None):
     # everything else above this is loaded regardless of auth state - the
     # sign-up form on the logged-out login screen needs it to show plan
     # choices before anyone has an account yet.
+    # One agent per county: state-bundle plans are no longer offered, and a
+    # county already assigned to someone drops out of the list entirely
+    # rather than showing as disabled - nothing left to sell once it's taken.
+    taken_counties = pipeline_db.get_taken_counties()
     pricing_plans = [
         {"kind": p["kind"], "key": p["key"], "label": p["label"], "priceCents": p["monthly_price_cents"]}
         for p in pipeline_db.get_pricing_plans()
+        if p["kind"] == "county" and p["key"] not in taken_counties
     ]
 
     counties = [{"folder": c["folder"], "label": c["label"]} for c in visible_counties]
@@ -2609,8 +2614,12 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         if not all(required):
             self._send_json(400, {"error": "All fields are required (Suite/Unit is optional)."})
             return
-        if kind not in ("county", "state_bundle"):
+        if kind != "county":
             self._send_json(400, {"error": "Invalid plan selected."})
+            return
+
+        if pipeline_db.get_county_owner(key):
+            self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
 
         if not pipeline_db.is_email_invited(email):
@@ -2665,16 +2674,16 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         email = get_session_email(self)
         kind = str(payload.get("kind", "")).strip()
         key = str(payload.get("key", "")).strip()
-        if kind not in ("county", "state_bundle") or not key:
+        if kind != "county" or not key:
             self._send_json(400, {"error": "Invalid plan."})
             return
 
-        already_has = (
-            key in pipeline_db.get_counties_for_user(email) if kind == "county"
-            else key in pipeline_db.get_state_grants_for_user(email)
-        )
-        if already_has:
+        if key in pipeline_db.get_counties_for_user(email):
             self._send_json(400, {"error": "You already have access to that plan."})
+            return
+
+        if pipeline_db.get_county_owner(key):
+            self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
 
         base_url = self._base_url()
