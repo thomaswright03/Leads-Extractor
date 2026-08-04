@@ -363,36 +363,72 @@ TEMPLATE = """<!doctype html>
 <title>Probate Property Leads</title>
 <style>
   :root {
-    --navy: #1f2a3d;
-    --navy-light: #2e3d57;
+    --navy: #101d33;
+    --navy-light: #24354f;
+    --navy-deep: #0a1424;
     /* Text color for headings/links/numbers - distinct from --navy because
        --navy also backs the always-dark header bar. Overriding --navy alone
        for dark mode would make the header's own white text unreadable. */
-    --heading: #1f2a3d;
-    --gold: #b8902e;
-    --gold-light: #e9c874;
-    --cream: #faf6ee;
+    --heading: #16233a;
+    --gold: #a6822e;
+    --gold-light: #ecce8a;
+    --gold-deep: #7c5e1f;
+    --cream: #faf7f1;
     --card: #ffffff;
-    --ink: #26303f;
-    --muted: #6b7688;
-    --border: #e7e1d3;
-    --confirmed-bg: #eef6ee;
-    --confirmed-ink: #2f6b3a;
-    --review-bg: #fbf3e4;
-    --review-ink: #93691e;
+    --ink: #232c3b;
+    --muted: #707b8d;
+    --border: #e9e2d2;
+    --confirmed-bg: #eaf6ee;
+    --confirmed-ink: #2a6b3d;
+    --review-bg: #fbf1de;
+    --review-ink: #8f631a;
+    --shadow-tint: 16, 26, 46;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
   }
   * { box-sizing: border-box; }
+  ::selection { background: var(--gold-light); color: #2a1f04; }
   body {
     margin: 0;
     font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-    background: var(--cream);
+    background:
+      radial-gradient(1100px 480px at 12% -10%, rgba(166,130,46,0.06), transparent 60%),
+      var(--cream);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(var(--shadow-tint), 0.22);
+    border-radius: 999px;
+    border: 3px solid var(--cream);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(var(--shadow-tint), 0.35); }
+
+  a, button, input, select, textarea { transition: background-color .18s var(--ease), border-color .18s var(--ease), color .18s var(--ease), box-shadow .18s var(--ease), transform .18s var(--ease), opacity .18s var(--ease); }
+  button { font-family: inherit; }
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(166,130,46,0.28), 0 0 0 1px var(--gold);
+    border-radius: 6px;
+  }
+
   header.top {
-    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    position: relative;
+    background:
+      radial-gradient(640px 320px at 85% -60%, rgba(236,206,138,0.14), transparent 65%),
+      linear-gradient(135deg, var(--navy-deep), var(--navy) 55%, var(--navy-light));
     color: #fff;
-    padding: 36px 32px 44px;
+    padding: 38px 32px 46px;
+    box-shadow: 0 18px 40px -18px rgba(var(--shadow-tint), 0.55);
+  }
+  header.top::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(236,206,138,0.5), transparent);
   }
   .top-inner {
     max-width: 1180px;
@@ -402,31 +438,34 @@ TEMPLATE = """<!doctype html>
     align-items: flex-end;
     flex-wrap: wrap;
     gap: 16px;
+    position: relative;
   }
   .brand {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
   }
   .brand .mark {
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, var(--gold-light), var(--gold) 70%);
+    background: radial-gradient(circle at 32% 30%, var(--gold-light), var(--gold) 65%, var(--gold-deep) 100%);
     flex-shrink: 0;
-    box-shadow: 0 0 0 4px rgba(255,255,255,0.08);
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.10), 0 6px 18px -4px rgba(0,0,0,0.5);
   }
   .brand h1 {
     margin: 0;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 26px;
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+    font-size: 27px;
     font-weight: 600;
     letter-spacing: 0.2px;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.15);
   }
   .brand p {
-    margin: 2px 0 0;
-    font-size: 13px;
-    color: rgba(255,255,255,0.7);
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    letter-spacing: 0.03em;
+    color: rgba(236,206,138,0.75);
   }
   .generated {
     font-size: 12px;
@@ -438,6 +477,7 @@ TEMPLATE = """<!doctype html>
     max-width: 1180px;
     margin: -26px auto 60px;
     padding: 0 32px;
+    position: relative;
   }
 
   .stats {
@@ -451,55 +491,75 @@ TEMPLATE = """<!doctype html>
     padding: 0 32px;
   }
   .stat-card {
+    position: relative;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    box-shadow: 0 8px 20px rgba(31,42,61,0.08);
+    border-radius: 14px;
+    padding: 20px 22px 20px 26px;
+    box-shadow: 0 10px 28px -10px rgba(var(--shadow-tint), 0.18);
+    overflow: hidden;
+    transition: transform .28s var(--ease), box-shadow .28s var(--ease);
+  }
+  .stat-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--gold-light), var(--gold));
+  }
+  .stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 36px -12px rgba(var(--shadow-tint), 0.28);
   }
   .stat-card .num {
-    font-family: Georgia, serif;
-    font-size: 30px;
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 32px;
     font-weight: 700;
     color: var(--heading);
     line-height: 1;
+    letter-spacing: 0.01em;
   }
   .stat-card .label {
-    margin-top: 6px;
-    font-size: 12.5px;
+    margin-top: 7px;
+    font-size: 12px;
     color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.09em;
+    font-weight: 600;
   }
   .stat-card.confirmed .num { color: var(--confirmed-ink); }
 
   .panel {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    box-shadow: 0 10px 24px rgba(31,42,61,0.06);
+    border-radius: 16px;
+    box-shadow: 0 14px 32px -16px rgba(var(--shadow-tint), 0.16);
     overflow: hidden;
     margin-bottom: 24px;
+    transition: box-shadow .28s var(--ease);
   }
   .panel-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 18px 22px;
+    padding: 20px 24px;
     border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
+    background: linear-gradient(180deg, rgba(166,130,46,0.035), transparent);
   }
   .panel-head h2 {
     margin: 0;
-    font-family: Georgia, serif;
-    font-size: 18px;
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 18.5px;
+    font-weight: 600;
     color: var(--heading);
+    letter-spacing: 0.01em;
   }
   .panel-head .sub {
     font-size: 12.5px;
     color: var(--muted);
-    margin-top: 2px;
+    margin-top: 3px;
   }
   .controls {
     display: flex;
@@ -519,6 +579,7 @@ TEMPLATE = """<!doctype html>
     background: var(--cream);
     color: var(--ink);
   }
+  .search-box input:focus-visible { background: var(--card); }
   .search-box::before {
     content: "";
     position: absolute;
@@ -542,25 +603,36 @@ TEMPLATE = """<!doctype html>
   }
   button.ghost {
     border: 1px solid var(--border);
-    background: var(--cream);
+    background: var(--card);
     color: var(--heading);
-    padding: 8px 14px;
+    padding: 8px 16px;
     border-radius: 999px;
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
+    box-shadow: 0 1px 2px rgba(var(--shadow-tint), 0.06);
   }
-  button.ghost:hover { background: #f2ecdd; }
+  button.ghost:hover {
+    background: var(--gold-light);
+    border-color: var(--gold-light);
+    color: #4a3a0d;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px -6px rgba(166,130,46,0.45);
+  }
+  button.ghost:active { transform: translateY(0); }
+  button.ghost:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
   table { width: 100%; border-collapse: collapse; }
   thead th {
     text-align: left;
-    font-size: 11.5px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.07em;
+    font-weight: 700;
     color: var(--muted);
-    padding: 10px 22px;
+    padding: 12px 22px;
     border-bottom: 1px solid var(--border);
-    background: #fbf9f4;
+    background: linear-gradient(180deg, #fbf9f3, #f7f3ea);
   }
   thead th[data-key] {
     cursor: pointer;
@@ -579,33 +651,51 @@ TEMPLATE = """<!doctype html>
   thead th[data-key].sort-asc::after { content: "\\2191"; opacity: 1; color: var(--gold); }
   thead th[data-key].sort-desc::after { content: "\\2193"; opacity: 1; color: var(--gold); }
   tbody td {
-    padding: 14px 22px;
+    padding: 15px 22px;
     border-bottom: 1px solid var(--border);
-    font-size: 14px;
+    font-size: 13.5px;
     vertical-align: top;
   }
+  tbody tr { position: relative; }
   tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background-color .15s var(--ease); }
   tbody tr:hover { background: #fbf9f2; }
+  tbody tr:hover td:first-child::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--gold-light), var(--gold));
+  }
   .name-cell .deceased { font-weight: 600; color: var(--heading); }
   .name-cell .owner { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
   .chip {
     display: inline-block;
     background: var(--gold-light);
-    color: #6b4f0a;
+    color: #5a4409;
     border-radius: 999px;
-    padding: 2px 9px;
+    padding: 2px 10px;
     font-size: 11.5px;
     margin: 1px 3px 1px 0;
-    font-weight: 600;
+    font-weight: 700;
   }
   .badge {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
+    gap: 6px;
+    padding: 3px 11px;
     border-radius: 999px;
-    font-size: 11.5px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
   }
   .badge.confirmed { background: var(--confirmed-bg); color: var(--confirmed-ink); }
   .badge.review { background: var(--review-bg); color: var(--review-ink); }
@@ -613,10 +703,11 @@ TEMPLATE = """<!doctype html>
     color: var(--heading);
     text-decoration: none;
     font-size: 13px;
+    font-weight: 500;
     border-bottom: 1px solid var(--gold);
     padding-bottom: 1px;
   }
-  a.link:hover { color: var(--gold); }
+  a.link:hover { color: var(--gold-deep); border-color: var(--gold-deep); }
   .links-cell { display: flex; flex-direction: column; gap: 4px; }
   .mailed-cell {
     display: flex;
@@ -636,7 +727,7 @@ TEMPLATE = """<!doctype html>
   }
   .mailed-label.yes { color: var(--confirmed-ink); }
   .empty {
-    padding: 40px 22px;
+    padding: 48px 22px;
     text-align: center;
     color: var(--muted);
     font-size: 14px;
@@ -650,43 +741,67 @@ TEMPLATE = """<!doctype html>
     border: 1px solid var(--gold);
     background: transparent;
     color: var(--heading);
-    padding: 5px 11px;
+    padding: 5px 12px;
     border-radius: 999px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
   }
-  button.send-letter-btn:hover { background: var(--gold-light); }
+  button.send-letter-btn:hover {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #fff;
+    box-shadow: 0 4px 12px -4px rgba(166,130,46,0.5);
+  }
 
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes backdropIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
   .modal-backdrop {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(20,24,31,0.55);
+    background: rgba(10,15,25,0.62);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     align-items: center;
     justify-content: center;
     padding: 20px;
     z-index: 100;
   }
-  .modal-backdrop.open { display: flex; }
+  .modal-backdrop.open { display: flex; animation: backdropIn .22s var(--ease); }
   .modal-card {
     background: var(--card);
-    border-radius: 14px;
+    border-radius: 16px;
     width: 100%;
     max-width: 560px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    box-shadow: 0 30px 70px -18px rgba(0,0,0,0.5);
+    animation: modalIn .28s var(--ease);
   }
   .modal-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 18px 22px;
+    padding: 20px 24px;
     border-bottom: 1px solid var(--border);
+    position: relative;
   }
-  .modal-head h3 { margin: 0; font-family: Georgia, serif; color: var(--heading); }
+  .modal-head::after {
+    content: "";
+    position: absolute;
+    left: 24px; right: 24px; bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold-light), transparent 60%);
+  }
+  .modal-head h3 { margin: 0; font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 18px; font-weight: 600; color: var(--heading); }
   .modal-close {
     border: none;
     background: none;
@@ -694,9 +809,16 @@ TEMPLATE = """<!doctype html>
     line-height: 1;
     color: var(--muted);
     cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+  .modal-close:hover { background: var(--cream); color: var(--heading); }
   .modal-body {
-    padding: 18px 22px;
+    padding: 20px 24px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -713,6 +835,46 @@ TEMPLATE = """<!doctype html>
     font-family: inherit;
     resize: vertical;
   }
+  .modal-body select:focus-visible, .modal-body textarea:focus-visible { background: var(--card); }
+
+  .field-label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+  .field-input {
+    width: 100%;
+    padding: 10px 13px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-size: 13.5px;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: inherit;
+  }
+  .field-input:focus-visible { background: var(--card); }
+  input[type="file"] {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  input[type="file"]::file-selector-button {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--heading);
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-right: 10px;
+    cursor: pointer;
+    transition: background-color .18s var(--ease), transform .18s var(--ease);
+  }
+  input[type="file"]::file-selector-button:hover { background: var(--gold-light); }
+
   .letter-warning {
     display: none;
     font-size: 12.5px;
@@ -734,21 +896,23 @@ TEMPLATE = """<!doctype html>
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    padding: 16px 22px;
+    padding: 18px 24px;
     border-top: 1px solid var(--border);
   }
   button.primary {
     border: none;
-    background: var(--navy);
+    background: linear-gradient(135deg, var(--navy-light), var(--navy));
     color: #fff;
-    padding: 9px 18px;
+    padding: 10px 20px;
     border-radius: 999px;
     font-size: 13.5px;
     font-weight: 600;
     cursor: pointer;
+    box-shadow: 0 8px 20px -8px rgba(var(--shadow-tint), 0.55);
   }
-  button.primary:hover { background: var(--navy-light); }
-  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary:hover { transform: translateY(-1px); box-shadow: 0 12px 26px -8px rgba(var(--shadow-tint), 0.65); }
+  button.primary:active { transform: translateY(0); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
   .bulk-list {
     display: flex;
@@ -757,20 +921,23 @@ TEMPLATE = """<!doctype html>
     max-height: 260px;
     overflow-y: auto;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 6px 4px;
+    background: var(--cream);
   }
   .bulk-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: 6px;
+    padding: 9px 11px;
+    border-radius: 7px;
     font-size: 13px;
+    transition: background-color .15s var(--ease);
   }
+  .bulk-row:hover { background: rgba(166,130,46,0.07); }
   .bulk-row .name { flex: 1; }
   .bulk-row .addr { color: var(--muted); font-size: 12px; }
-  .bulk-row .status { font-size: 11.5px; color: var(--muted); min-width: 90px; text-align: right; }
+  .bulk-row .status { font-size: 11.5px; font-weight: 600; color: var(--muted); min-width: 90px; text-align: right; }
   .bulk-row.sending .status { color: var(--gold); }
   .bulk-row.ok .status { color: var(--confirmed-ink); }
   .bulk-row.err .status { color: #a13a3a; }
@@ -783,26 +950,38 @@ TEMPLATE = """<!doctype html>
     color: var(--muted);
     font-size: 12px;
     text-align: center;
+    letter-spacing: 0.01em;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --cream: #14181f;
-      --card: #1c212b;
+      --cream: #12161f;
+      --card: #1b202b;
       --ink: #e7e9ee;
       --muted: #93a0b4;
       --border: #2a3140;
-      --heading: #dbe2ee;
+      --heading: #e3c98a;
       --confirmed-bg: #17281c;
       --confirmed-ink: #7bc98a;
       --review-bg: #2b220f;
       --review-ink: #e0b563;
+      --shadow-tint: 0, 0, 0;
     }
-    thead th { background: #191e27; }
+    body {
+      background:
+        radial-gradient(1100px 480px at 12% -10%, rgba(236,206,138,0.05), transparent 60%),
+        var(--cream);
+    }
+    thead th { background: linear-gradient(180deg, #191e27, #161b23); }
     tbody tr:hover { background: #202634; }
     .search-box input { background: #14181f; color: var(--ink); }
-    button.ghost { background: #14181f; }
-    button.ghost:hover { background: #232a38; }
+    .search-box input:focus-visible { background: #191e27; }
+    button.ghost { background: var(--card); }
+    button.ghost:hover { background: var(--gold); color: #1a1200; border-color: var(--gold); }
+    .panel-head { background: linear-gradient(180deg, rgba(236,206,138,0.05), transparent); }
+    .modal-body select, .modal-body textarea { background: #14181f; }
+    .bulk-list { background: #14181f; }
+    ::-webkit-scrollbar-thumb { border-color: var(--cream); }
   }
 
   @media print {
@@ -818,72 +997,92 @@ TEMPLATE = """<!doctype html>
     tbody tr { border-bottom: 1px solid var(--border); padding: 10px 0; display: block; }
   }
 
+  @keyframes cardRise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   .login-screen {
+    position: relative;
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--navy), var(--navy-light));
+    background:
+      radial-gradient(900px 500px at 20% 0%, rgba(236,206,138,0.10), transparent 60%),
+      radial-gradient(700px 500px at 100% 100%, rgba(236,206,138,0.06), transparent 55%),
+      linear-gradient(135deg, var(--navy-deep), var(--navy) 55%, var(--navy-light));
     padding: 24px;
+    overflow: hidden;
   }
   .login-card {
+    position: relative;
     background: var(--card);
-    border-radius: 16px;
-    padding: 36px 34px;
+    border-radius: 18px;
+    padding: 38px 36px;
     width: 100%;
     max-width: 380px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+    box-shadow: 0 30px 70px -16px rgba(0,0,0,0.55);
+    animation: cardRise .5s var(--ease);
   }
   .login-card .mark {
-    width: 44px;
-    height: 44px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, var(--gold-light), var(--gold) 70%);
-    margin: 0 auto 16px;
+    background: radial-gradient(circle at 32% 30%, var(--gold-light), var(--gold) 65%, var(--gold-deep) 100%);
+    margin: 0 auto 18px;
+    box-shadow: 0 8px 20px -6px rgba(166,130,46,0.55);
   }
   .login-card h1 {
-    margin: 0 0 4px;
-    font-family: Georgia, serif;
-    font-size: 21px;
+    margin: 0 0 5px;
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 22px;
+    font-weight: 600;
     color: var(--heading, var(--navy));
     text-align: center;
+    letter-spacing: 0.01em;
   }
   .login-card p.sub {
-    margin: 0 0 24px;
+    margin: 0 0 26px;
     font-size: 13px;
     color: var(--muted);
     text-align: center;
   }
   .login-card label {
     display: block;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: var(--muted);
     margin-bottom: 6px;
     margin-top: 16px;
   }
   .login-card input {
     width: 100%;
-    padding: 10px 12px;
+    padding: 11px 13px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 9px;
     font-size: 14px;
     background: var(--cream);
     color: var(--ink);
   }
-  .login-card button {
+  .login-card input:focus-visible { background: var(--card); }
+  .login-card button[type="submit"] {
     width: 100%;
-    margin-top: 22px;
-    padding: 11px;
+    margin-top: 24px;
+    padding: 12px;
     border: none;
     border-radius: 999px;
-    background: var(--navy);
+    background: linear-gradient(135deg, var(--navy-light), var(--navy));
     color: #fff;
     font-size: 14px;
     font-weight: 600;
+    letter-spacing: 0.01em;
     cursor: pointer;
+    box-shadow: 0 10px 24px -8px rgba(var(--shadow-tint), 0.55);
   }
-  .login-card button:hover { background: var(--navy-light); }
+  .login-card button[type="submit"]:hover { transform: translateY(-1px); box-shadow: 0 14px 28px -8px rgba(var(--shadow-tint), 0.65); }
+  .login-card button[type="submit"]:active { transform: translateY(0); }
   .login-error {
     display: none;
     margin-top: 14px;
@@ -899,24 +1098,31 @@ TEMPLATE = """<!doctype html>
     color: var(--muted);
     text-align: center;
   }
-  .login-card p.switch-link a { color: var(--heading); font-weight: 600; text-decoration: none; }
-  .login-card label.field-sub { font-weight: 400; margin-top: 10px; }
+  .login-card p.switch-link a { color: var(--gold-deep); font-weight: 700; text-decoration: none; }
+  .login-card p.switch-link a:hover { color: var(--gold); }
+  .login-card label.field-sub { font-weight: 500; text-transform: none; letter-spacing: normal; margin-top: 10px; font-size: 12px; }
   .login-card .field-row { display: flex; gap: 10px; }
   .login-card .field-row > div { flex: 1; }
   .plan-option {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
     margin-top: 8px;
     cursor: pointer;
     background: var(--cream);
   }
-  .plan-option input { width: auto; }
-  .plan-option .plan-label { flex: 1; font-size: 13.5px; color: var(--ink); }
-  .plan-option .plan-price { font-size: 13px; font-weight: 600; color: var(--heading); }
+  .plan-option:hover { border-color: var(--gold-light); }
+  .plan-option:has(input:checked) {
+    border-color: var(--gold);
+    background: rgba(166,130,46,0.08);
+    box-shadow: 0 0 0 1px var(--gold);
+  }
+  .plan-option input { width: auto; accent-color: var(--gold-deep); }
+  .plan-option .plan-label { flex: 1; font-size: 13.5px; font-weight: 500; color: var(--ink); }
+  .plan-option .plan-price { font-size: 13px; font-weight: 700; color: var(--heading); }
 </style>
 </head>
 <body>
@@ -1014,17 +1220,17 @@ TEMPLATE = """<!doctype html>
         <div class="sub">Upload a company&rsquo;s pre-designed letter PDF to send as-is via Lob</div>
       </div>
     </div>
-    <form id="pdf-upload-form" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; padding:18px 22px; border-bottom:1px solid var(--border);">
+    <form id="pdf-upload-form" style="display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; padding:20px 24px; border-bottom:1px solid var(--border);">
       <div style="flex:1; min-width:160px;">
-        <label for="pdf-company-name" style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Company Name</label>
-        <input type="text" id="pdf-company-name" required style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--cream); color:var(--ink); font-size:13.5px;">
+        <label for="pdf-company-name" class="field-label">Company Name</label>
+        <input type="text" id="pdf-company-name" required class="field-input">
       </div>
       <div style="flex:1; min-width:160px;">
-        <label for="pdf-template-name" style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">Template Name</label>
-        <input type="text" id="pdf-template-name" required style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--cream); color:var(--ink); font-size:13.5px;">
+        <label for="pdf-template-name" class="field-label">Template Name</label>
+        <input type="text" id="pdf-template-name" required class="field-input">
       </div>
       <div>
-        <label for="pdf-file-input" style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">PDF File</label>
+        <label for="pdf-file-input" class="field-label">PDF File</label>
         <input type="file" id="pdf-file-input" accept="application/pdf" required>
       </div>
       <button type="submit" class="ghost">Upload</button>
@@ -1731,7 +1937,7 @@ TEMPLATE = """<!doctype html>
   // --- Add More Access (subscribe to another county/bundle while already logged in) ---
   const addAccessPlansDiv = document.getElementById('add-access-plans');
   const addAccessResult = document.getElementById('add-access-result');
-  const ownedCountyFolders = new Set(counties.map(c => c.folder));
+  const ownedCountyFolders = new Set((leadData.counties || []).map(c => c.folder));
 
   (leadData.pricingPlans || []).forEach(plan => {
     const alreadyOwned = plan.kind === 'county' && ownedCountyFolders.has(plan.key);
