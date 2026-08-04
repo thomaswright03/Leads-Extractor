@@ -34,7 +34,16 @@ def prompt_mode():
 
 
 if __name__ == "__main__":
-    mode = prompt_mode()
+    # Non-interactive when a mode is passed as an argv (e.g. `master.py daily`
+    # from a cron job / CI), otherwise falls back to the interactive prompt
+    # for manual runs.
+    if len(sys.argv) > 1:
+        mode = sys.argv[1].strip().lower()
+        if mode not in ("weekly", "daily"):
+            print(f"Invalid mode '{mode}' - expected 'weekly' or 'daily'.")
+            sys.exit(1)
+    else:
+        mode = prompt_mode()
     for script in PIPELINE:
         run_step(script, mode)
     print("\nPipeline complete.")
