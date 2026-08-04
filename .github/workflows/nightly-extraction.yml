@@ -27,10 +27,13 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # 3.12 removed the stdlib distutils module that undetected_chromedriver
+          # still imports (ModuleNotFoundError: No module named 'distutils') -
+          # 3.11 is the newest version that still ships it.
+          python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install pandas openpyxl selenium undetected-chromedriver webdriver-manager
+        run: pip install pandas openpyxl xlrd selenium undetected-chromedriver webdriver-manager
 
       - name: Install virtual display (Chrome runs non-headless to avoid bot detection)
         run: sudo apt-get update && sudo apt-get install -y xvfb
