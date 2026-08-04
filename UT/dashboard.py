@@ -23,6 +23,16 @@ OUTPUT_PATH = os.path.join(SCRIPT_DIR, "dashboard.html")
 PDF_TEMPLATES_DIR = os.path.join(SCRIPT_DIR, "pdf_templates")
 PORT = 8765
 
+# Comma-separated allowlist for the admin (operator) view - sees every
+# county regardless of who owns it, and can send letters on any agent's
+# behalf (see get_allowed_county_folders() and handle_send_letter() below).
+# Not stored in Supabase since it's operator-level, not tenant data.
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+
+
+def is_admin(email):
+    return bool(email) and email.strip().lower() in ADMIN_EMAILS
+
 # In-memory session store (session_token -> {"email", "expires_at"}). Lives
 # only as long as this process - a restart just means everyone logs in
 # again, which is fine for how this tool is actually used. Real credentials
@@ -337,9 +347,14 @@ def get_allowed_county_folders(email):
     """Every county folder key this email can access - explicit per-county
     grants unioned with whole-state grants expanded against today's
     COUNTIES list. Shared by build_dashboard_html() and the send-letter
-    authorization check so the two can't drift apart."""
+    authorization check so the two can't drift apart.
+
+    An admin email (ADMIN_EMAILS) sees every county regardless of who
+    owns it - the whole point of the admin view."""
     if not email:
         return set()
+    if is_admin(email):
+        return {c["folder"] for c in COUNTIES}
     granted_counties = set(pipeline_db.get_counties_for_user(email))
     granted_states = set(pipeline_db.get_state_grants_for_user(email))
     return granted_counties | {c["folder"] for c in COUNTIES if c["state"] in granted_states}
@@ -2323,11 +2338,14 @@ def handle_send_letter(payload, sender_email=None):
     """Validates the request, sends via Lob, and records the attempt
     (success or failure) in pipeline_cache.db. Returns (http_status, body_dict).
 
-    sender_email's own mailing profile (if they've set one) becomes the
-    Lob "from" address, so each agent's letters show their own return
-    address - falls back to mailer.py's LOB_FROM_* env vars (Summit
-    Sotheby's, the original single-operator identity) when there's no
-    profile, which is exactly the case for the original admin account."""
+    The Lob "from" address is the mailing profile of the county's owner -
+    not necessarily sender_email - so an admin sending on an agent's behalf
+    (see is_admin() / get_allowed_county_folders()) still puts that agent's
+    own return address on the letter, not the admin's. For a normal agent
+    sending their own county's letters the two are the same email, so this
+    is unchanged from before. Falls back to mailer.py's LOB_FROM_* env vars
+    (Summit Sotheby's, the original single-operator identity) when the
+    county has no owner with a profile."""
     template_id = str(payload.get("templateId", "")).strip()
     is_pdf_template = template_id.startswith("pdf:")
 
@@ -2347,8 +2365,12 @@ def handle_send_letter(payload, sender_email=None):
     message = payload.get("message", "")
     to_name = owner_name or full_name
 
+    owner_email = pipeline_db.get_county_owner(county) if county else None
+    if sender_email and owner_email and sender_email.strip().lower() != owner_email.strip().lower():
+        print(f"{sender_email} sent a letter for county '{county}' on behalf of {owner_email}.")
+
     from_address = None
-    mailing_profile = pipeline_db.get_mailing_profile(sender_email) if sender_email else None
+    mailing_profile = pipeline_db.get_mailing_profile(owner_email) if owner_email else None
     if mailing_profile:
         from_address = {
             "name": mailing_profile["from_name"],
