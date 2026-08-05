@@ -1191,6 +1191,12 @@ TEMPLATE = """<!doctype html>
     <label style="margin-top:22px;">Choose a Plan</label>
     <div id="signup-plans"></div>
 
+    <label style="display:flex; align-items:flex-start; gap:8px; margin-top:18px; font-weight:normal;">
+      <input type="checkbox" id="signup-agree-terms" required style="margin-top:3px;">
+      <span>I agree to the <a href="/terms" target="_blank">Terms of Service</a> and
+      <a href="/privacy" target="_blank">Privacy Policy</a>.</span>
+    </label>
+
     <button type="submit">Create Account &amp; Continue to Payment</button>
     <div class="login-error" id="signup-error"></div>
     <p class="switch-link">Already have an account? <a href="#" id="show-login-link">Log in</a></p>
@@ -2205,6 +2211,7 @@ TEMPLATE = """<!doctype html>
       fromCity: document.getElementById('signup-from-city').value.trim(),
       fromState: document.getElementById('signup-from-state').value.trim(),
       fromZip: document.getElementById('signup-from-zip').value.trim(),
+      agreedToTerms: document.getElementById('signup-agree-terms').checked,
       kind, key,
     };
 
@@ -2457,8 +2464,236 @@ def handle_send_letter(payload, sender_email=None):
     }
 
 
+LEGAL_PAGE_STYLE = """
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #faf7f1;
+    color: #232c3b;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+  a { color: #7c5e1f; }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 28px;
+    margin-bottom: 4px;
+  }
+  .updated { color: #707b8d; font-size: 13px; margin-bottom: 36px; }
+  h2 {
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 19px;
+    margin-top: 34px;
+    border-bottom: 1px solid #e9e2d2;
+    padding-bottom: 6px;
+  }
+  p, li { font-size: 14.5px; }
+  .back { display: inline-block; margin-bottom: 24px; font-size: 13.5px; }
+"""
+
+LEGAL_EFFECTIVE_DATE = "August 4, 2026"
+LEGAL_ENTITY_NAME = "Wright AI Solutions, LLC"
+LEGAL_CONTACT_EMAIL = "t@thomasewright.com"
+LEGAL_GOVERNING_STATE = "Utah"
+
+TERMS_HTML = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Service - Probate Property Leads</title>
+<style>{LEGAL_PAGE_STYLE}</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">&larr; Back</a>
+  <h1>Terms of Service</h1>
+  <div class="updated">Effective {LEGAL_EFFECTIVE_DATE}</div>
+
+  <p>These Terms of Service ("Terms") govern access to and use of the Probate
+  Property Leads platform (the "Service"), operated by {LEGAL_ENTITY_NAME}
+  ("we," "us," or "our"). By creating an account or subscribing to the
+  Service, you agree to these Terms.</p>
+
+  <h2>1. The Service</h2>
+  <p>The Service provides subscribers ("Agents") with access to probate
+  and pre-foreclosure property leads for specific counties, tools to send
+  physical mail to leads via a third-party mail provider, and related
+  account management features.</p>
+
+  <h2>2. Eligibility &amp; Accounts</h2>
+  <p>Accounts may only be created by an email address we've explicitly
+  invited. You're responsible for maintaining the confidentiality of your
+  login credentials and for all activity under your account. You must
+  provide accurate business/return-address information at signup, since
+  it's printed on mail sent through the Service.</p>
+
+  <h2>3. Subscriptions, Billing &amp; Cancellation</h2>
+  <p>Subscriptions are billed monthly in advance via our payment
+  processor, Stripe. Each county is sold to at most one subscriber at a
+  time - once you subscribe to a county, it is not available to any other
+  subscriber until your access ends. We do not guarantee that any
+  particular county will be available at the time you attempt to
+  subscribe.</p>
+  <p><strong>Refunds:</strong> subscription fees are non-refundable,
+  including for partial billing periods. You may cancel at any time;
+  cancellation stops future billing but does not refund the current
+  period, and county access continues until the end of the period already
+  paid for.</p>
+
+  <h2>4. Acceptable Use</h2>
+  <p>You agree not to: share your account or county access with anyone
+  outside your own business; resell, sublicense, or redistribute leads or
+  Service access to a third party; scrape, export, or reproduce the
+  Service's data for use outside the Service; or use the Service for any
+  unlawful purpose.</p>
+
+  <h2>5. Lead Data &amp; Your Compliance Obligations</h2>
+  <p>Leads are compiled from public records (including county assessor
+  and probate records, and published obituaries) and are provided "as
+  is," without any guarantee of accuracy, completeness, or continued
+  availability. You are solely responsible for ensuring that your own use
+  of lead data and any communications you send - including mail sent
+  through the Service - complies with all applicable federal, state, and
+  local laws, including any laws specific to contacting individuals in
+  connection with a probate or estate matter.</p>
+
+  <h2>6. Intellectual Property</h2>
+  <p>The Service, including its software, design, and compiled lead
+  data, is owned by {LEGAL_ENTITY_NAME} or its licensors. These Terms
+  don't grant you any rights to our intellectual property beyond what's
+  needed to use the Service as intended during an active subscription.</p>
+
+  <h2>7. Termination</h2>
+  <p>We may suspend or terminate your account for violation of these
+  Terms, non-payment, or misuse of leads or the Service. You may stop
+  using the Service at any time by canceling your subscription.</p>
+
+  <h2>8. Disclaimer of Warranties</h2>
+  <p>The Service is provided "as is" and "as available," without
+  warranties of any kind, express or implied, including fitness for a
+  particular purpose. We don't guarantee any particular volume, quality,
+  or outcome from leads provided through the Service.</p>
+
+  <h2>9. Limitation of Liability</h2>
+  <p>To the fullest extent permitted by law, {LEGAL_ENTITY_NAME} will not
+  be liable for any indirect, incidental, or consequential damages
+  arising from your use of the Service, and our total liability for any
+  claim will not exceed the amount you paid us in the three months
+  preceding the claim.</p>
+
+  <h2>10. Governing Law</h2>
+  <p>These Terms are governed by the laws of the State of
+  {LEGAL_GOVERNING_STATE}, without regard to conflict-of-law principles.</p>
+
+  <h2>11. Changes to These Terms</h2>
+  <p>We may update these Terms from time to time. Continued use of the
+  Service after a change takes effect constitutes acceptance of the
+  updated Terms.</p>
+
+  <h2>12. Contact</h2>
+  <p>Questions about these Terms can be sent to
+  <a href="mailto:{LEGAL_CONTACT_EMAIL}">{LEGAL_CONTACT_EMAIL}</a>.</p>
+</div>
+</body>
+</html>
+"""
+
+PRIVACY_HTML = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy - Probate Property Leads</title>
+<style>{LEGAL_PAGE_STYLE}</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">&larr; Back</a>
+  <h1>Privacy Policy</h1>
+  <div class="updated">Effective {LEGAL_EFFECTIVE_DATE}</div>
+
+  <p>This Privacy Policy explains how {LEGAL_ENTITY_NAME} ("we," "us," or
+  "our") collects, uses, and shares information in connection with the
+  Probate Property Leads platform (the "Service").</p>
+
+  <h2>1. Information We Collect</h2>
+  <p>When you create an account, we collect your email address and the
+  business name and return-mailing address you provide (used as the
+  return address on mail you send through the Service). We do not collect
+  or store your payment card details directly - subscription payments are
+  handled by our payment processor, Stripe, subject to Stripe's own
+  privacy policy.</p>
+
+  <h2>2. Lead Data</h2>
+  <p>The Service also provides access to information compiled from public
+  records - county assessor and probate records, and published obituaries
+  - about property owners and estates. This data is not information
+  submitted by you, and this section describes it for transparency rather
+  than as data collected "from" you.</p>
+
+  <h2>3. How We Use Information</h2>
+  <p>We use account information to operate the Service: authenticating
+  logins, billing subscriptions, granting county access, and printing the
+  correct return address on mail you send. We don't sell your account
+  information to third parties.</p>
+
+  <h2>4. Third-Party Service Providers</h2>
+  <p>We rely on the following third parties to operate the Service, each
+  of which processes limited data on our behalf under their own privacy
+  terms:</p>
+  <ul>
+    <li><strong>Supabase</strong> - authentication and database hosting</li>
+    <li><strong>Stripe</strong> - subscription billing and payment processing</li>
+    <li><strong>Lob</strong> - physical mail printing and delivery</li>
+  </ul>
+
+  <h2>5. Data Retention</h2>
+  <p>We retain account information for as long as your account is active,
+  and letter-sending records indefinitely as a business record of mail
+  sent through the Service. You can request deletion of your account
+  information by contacting us, subject to records we're required to
+  keep for billing or legal purposes.</p>
+
+  <h2>6. Data Security</h2>
+  <p>We use industry-standard measures - including encrypted connections
+  and access-controlled hosting - to protect account information, but no
+  method of transmission or storage is completely secure.</p>
+
+  <h2>7. Cookies</h2>
+  <p>The Service uses a single session cookie to keep you logged in. We
+  don't use advertising or cross-site tracking cookies.</p>
+
+  <h2>8. Children's Privacy</h2>
+  <p>The Service is intended for business use by real estate professionals
+  and is not directed at children.</p>
+
+  <h2>9. Changes to This Policy</h2>
+  <p>We may update this Privacy Policy from time to time. Continued use
+  of the Service after a change takes effect constitutes acceptance of
+  the updated policy.</p>
+
+  <h2>10. Contact</h2>
+  <p>Questions about this policy can be sent to
+  <a href="mailto:{LEGAL_CONTACT_EMAIL}">{LEGAL_CONTACT_EMAIL}</a>.</p>
+</div>
+</body>
+</html>
+"""
+
+
 class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path in ("/terms", "/privacy"):
+            body = (TERMS_HTML if self.path == "/terms" else PRIVACY_HTML).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if self.path.startswith("/pdf-templates/"):
             if not get_session_email(self):
                 self._send_json(401, {"error": "Not signed in."})
@@ -2631,10 +2866,14 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         from_zip = str(payload.get("fromZip", "")).strip()
         kind = str(payload.get("kind", "")).strip()
         key = str(payload.get("key", "")).strip()
+        agreed_to_terms = bool(payload.get("agreedToTerms"))
 
         required = [email, password, from_name, from_address1, from_city, from_state, from_zip, kind, key]
         if not all(required):
             self._send_json(400, {"error": "All fields are required (Suite/Unit is optional)."})
+            return
+        if not agreed_to_terms:
+            self._send_json(400, {"error": "You must agree to the Terms of Service and Privacy Policy."})
             return
         if kind != "county":
             self._send_json(400, {"error": "Invalid plan selected."})
