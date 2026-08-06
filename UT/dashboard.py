@@ -499,11 +499,7 @@ TEMPLATE = """<!doctype html>
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
-    /* Breaks out of main's 1180px max-width so the stat cards stretch
-       edge-to-edge across the full viewport instead of being boxed into the
-       centered content column like everything else on the page. */
-    margin: 0 calc(50% - 50vw) 28px;
-    padding: 0 32px;
+    margin: 0 0 28px;
   }
   .stat-card {
     position: relative;
