@@ -1094,6 +1094,7 @@ TEMPLATE = """<!doctype html>
   }
   .login-card button[type="submit"]:hover { transform: translateY(-1px); box-shadow: 0 14px 28px -8px rgba(var(--shadow-tint), 0.65); }
   .login-card button[type="submit"]:active { transform: translateY(0); }
+  .login-card button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
   .login-error {
     display: none;
     margin-top: 14px;
@@ -2132,6 +2133,10 @@ TEMPLATE = """<!doctype html>
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     loginError.classList.remove('show');
+    const submitBtn = loginForm.querySelector('button[type="submit"]');
+    const originalLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in…';
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
@@ -2140,10 +2145,14 @@ TEMPLATE = """<!doctype html>
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Sign in failed.');
+      // Left disabled/relabeled on success - the page reload below replaces
+      // this whole screen, so there's nothing to reset it for.
       window.location.reload();
     } catch (err) {
       loginError.textContent = err.message;
       loginError.classList.add('show');
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
     }
   });
 
@@ -2200,6 +2209,11 @@ TEMPLATE = """<!doctype html>
     }
     const [kind, key] = selectedPlan.value.split(':');
 
+    const signupSubmitBtn = signupForm.querySelector('button[type="submit"]');
+    const originalSignupLabel = signupSubmitBtn.textContent;
+    signupSubmitBtn.disabled = true;
+    signupSubmitBtn.textContent = 'Creating account…';
+
     const body = {
       email: document.getElementById('signup-email').value.trim(),
       password: document.getElementById('signup-password').value,
@@ -2222,6 +2236,7 @@ TEMPLATE = """<!doctype html>
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Sign up failed.');
       if (data.checkoutUrl) {
+        // Left disabled/relabeled - about to navigate away to Stripe.
         window.location.href = data.checkoutUrl;
       } else {
         window.location.reload();
@@ -2229,6 +2244,8 @@ TEMPLATE = """<!doctype html>
     } catch (err) {
       signupError.textContent = err.message;
       signupError.classList.add('show');
+      signupSubmitBtn.disabled = false;
+      signupSubmitBtn.textContent = originalSignupLabel;
     }
   });
 </script>
