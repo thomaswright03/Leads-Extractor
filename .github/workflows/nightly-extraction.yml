@@ -13,7 +13,18 @@ on:
     # always UTC, no per-timezone/DST awareness) - adjust if that drift
     # matters.
     - cron: "0 7 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pipeline mode"
+        type: choice
+        options: [daily, weekly]
+        default: daily
+      county:
+        description: "Which county to run"
+        type: choice
+        options: [both, slk, uta]
+        default: both
 
 permissions:
   contents: write
@@ -39,17 +50,19 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Run Salt Lake County pipeline
+        if: github.event_name != 'workflow_dispatch' || inputs.county == 'both' || inputs.county == 'slk'
         working-directory: UT/slk
-        run: xvfb-run -a python3 master.py daily
+        run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Utah County pipeline
+        if: github.event_name != 'workflow_dispatch' || inputs.county == 'both' || inputs.county == 'uta'
         working-directory: UT/uta
-        run: xvfb-run -a python3 master.py daily
+        run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Commit and push new leads
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add UT/slk UT/uta
-          git diff --cached --quiet || git commit -m "Nightly lead extraction $(date -u +%Y-%m-%d)"
+          git diff --cached --quiet || git commit -m "Lead extraction $(date -u +%Y-%m-%d) (${{ inputs.mode || 'daily' }}, ${{ inputs.county || 'both' }})"
           git push
