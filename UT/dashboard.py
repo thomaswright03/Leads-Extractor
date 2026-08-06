@@ -1828,7 +1828,7 @@ TEMPLATE = """<!doctype html>
     }
   }
 
-  const confirmedState = { query: '', countyFolder: '', sortKey: null, sortDir: 'asc' };
+  const confirmedState = { query: '', countyFolder: '', sortKey: 'dateAdded', sortDir: 'desc' };
 
   function applyState(list, state) {
     let result = state.countyFolder ? list.filter(l => l.countyFolder === state.countyFolder) : list.slice();
