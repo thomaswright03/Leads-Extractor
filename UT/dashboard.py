@@ -1291,7 +1291,8 @@ TEMPLATE = """<!doctype html>
         <button class="ghost" onclick="window.print()">Print</button>
       </div>
     </div>
-    <table id="confirmed-table">
+    <div style="overflow-x:auto;">
+    <table id="confirmed-table" style="width:auto; min-width:100%;">
       <thead>
         <tr>
           <th data-key="county">County</th>
@@ -1309,6 +1310,7 @@ TEMPLATE = """<!doctype html>
       </thead>
       <tbody id="confirmed-body"></tbody>
     </table>
+    </div>
     <div class="empty" id="confirmed-empty" style="display:none;">__CONFIRMED_EMPTY_MESSAGE__</div>
   </div>
 </main>
