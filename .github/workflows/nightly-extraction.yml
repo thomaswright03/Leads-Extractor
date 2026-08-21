@@ -5,7 +5,7 @@ name: Nightly lead extraction
 # state came out of the run. Pushing to main is what actually surfaces new
 # leads on the live dashboard - Render auto-redeploys on push, and
 # dashboard.py reads confirmed leads straight from the committed .xlsx files
-# in UT/slk and UT/uta (see load_confirmed_leads_from_excel()).
+# in UT/slk, UT/uta, and AZ/mar (see load_confirmed_leads_from_excel()).
 on:
   schedule:
     # 07:00 UTC = midnight Mountain Daylight Time. Shifts to 1am Mountain
@@ -23,8 +23,8 @@ on:
       county:
         description: "Which county to run"
         type: choice
-        options: [both, slk, uta]
-        default: both
+        options: [all, slk, uta, mar]
+        default: all
 
 permissions:
   contents: write
@@ -50,19 +50,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Run Salt Lake County pipeline
-        if: github.event_name != 'workflow_dispatch' || inputs.county == 'both' || inputs.county == 'slk'
+        if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'slk'
         working-directory: UT/slk
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Utah County pipeline
-        if: github.event_name != 'workflow_dispatch' || inputs.county == 'both' || inputs.county == 'uta'
+        if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'uta'
         working-directory: UT/uta
+        run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
+
+      - name: Run Maricopa County pipeline
+        if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'mar'
+        working-directory: AZ/mar
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Commit and push new leads
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add UT/slk UT/uta
-          git diff --cached --quiet || git commit -m "Lead extraction $(date -u +%Y-%m-%d) (${{ inputs.mode || 'daily' }}, ${{ inputs.county || 'both' }})"
+          git add UT/slk UT/uta AZ/mar
+          git diff --cached --quiet || git commit -m "Lead extraction $(date -u +%Y-%m-%d) (${{ inputs.mode || 'daily' }}, ${{ inputs.county || 'all' }})"
           git push

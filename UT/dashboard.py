@@ -236,6 +236,10 @@ def handle_delete_pdf_template(payload):
 # is the one place that needs a manual update; nothing else auto-discovers
 # counties, since importing a county's own scripts here isn't safe (e.g.
 # uta/geocode.py pulls in selenium, which this dashboard has no reason to need).
+# "folder" doubles as the access-control key (see get_allowed_county_folders())
+# and must stay a short unique name even for counties outside UT - "path" is
+# what actually locates the folder on disk, relative to this script's own
+# directory, and only needs setting when it isn't a direct subfolder here.
 COUNTIES = [
     {
         "folder": "slk",
@@ -249,6 +253,13 @@ COUNTIES = [
         "state": "UT",
         "parcel_url_base": "https://www.utahcounty.gov/LandRecords/ValNotice.asp?av_serial=",
     },
+    {
+        "folder": "mar",
+        "path": "../AZ/mar",
+        "label": "Maricopa County",
+        "state": "AZ",
+        "parcel_url_base": "https://mcassessor.maricopa.gov/mcs/?q=",
+    },
 ]
 
 # Matches DC.py's get_output_path() naming: "2026-07-21.xlsx" or, on a second
@@ -257,8 +268,13 @@ DATED_XLSX_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:_\d{2}-\d{2}-\d{2})?\.x
 
 
 def assessor_url(parcel_id, parcel_url_base):
-    digits = "".join(ch for ch in (parcel_id or "") if ch.isdigit())
-    return f"{parcel_url_base}{digits}" if digits else ""
+    # Digits-only is correct for Salt Lake/Utah County's pure-numeric serials,
+    # but Maricopa APNs can carry a trailing letter split suffix (e.g.
+    # "13267062L" for a rental-registered parcel) that its own ?q= search
+    # treats as significant - stripping it would silently link to a
+    # different parcel, so keep alphanumerics instead.
+    cleaned = "".join(ch for ch in (parcel_id or "") if ch.isalnum())
+    return f"{parcel_url_base}{cleaned}" if cleaned else ""
 
 
 def format_date_added(date_str, fmt="%Y-%m-%d %H:%M:%S"):
@@ -301,7 +317,7 @@ def load_confirmed_leads_from_excel(county):
     dated export. Read every such file in this county's folder and merge them
     into one list, keyed by (full name, parcel id) so a lead re-confirmed on a
     later date overwrites the earlier entry instead of duplicating it."""
-    county_dir = os.path.join(SCRIPT_DIR, county["folder"])
+    county_dir = os.path.join(SCRIPT_DIR, county.get("path", county["folder"]))
     if not os.path.isdir(county_dir):
         return []
 
