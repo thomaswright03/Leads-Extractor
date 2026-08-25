@@ -1,6 +1,7 @@
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+import sys
 import time
 import re
 from selenium.webdriver.support.ui import WebDriverWait
@@ -10,6 +11,20 @@ from urllib.parse import urlparse, parse_qs
 
 import pipeline_db
 import geocode
+
+# Four straight fix attempts (webdriver_manager removal, ~/Downloads
+# creation, --disable-gpu, --disable-popup-blocking) all left the exact same
+# 100%-failure pattern unchanged in CI, and the blank "Message: " on every
+# failure is consistent with a bare TimeoutException giving no real
+# diagnostic info - unbuffered, timestamped output so the next CI run's log
+# actually shows real per-search timing and the real exception type instead
+# of a buffered dump of "Error during search... Message: " with nothing to
+# go on.
+sys.stdout.reconfigure(line_buffering=True)
+
+
+def _log(msg):
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 # Path to the downloaded Excel file to process and later delete
 downloaded_excel_file = os.path.expanduser('~/Downloads/pt1091601.xls')
@@ -108,25 +123,29 @@ for index, (name, posted_date) in enumerate(names_with_dates):
     driver = webdriver.Chrome(options=options)
 
     try:
+        _log(f"Searching for last name: {last_name}")
         driver.get("https://www.saltlakecounty.gov/assessor/")
+        _log(f"  loaded {driver.current_url!r}, title={driver.title!r}")
         time.sleep(0.5)
-
-        print(f"Searching for last name: {last_name}")
 
         search_box_owner = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "OwnerSearch"))
         )
+        _log("  found OwnerSearch box")
         search_box_owner.clear()
         search_box_owner.send_keys(last_name)
 
         search_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, "/html/body/section[3]/div/div/main/section[1]/div[2]/div/form/button[1]"))
         )
+        _log("  found search button")
         driver.execute_script("arguments[0].scrollIntoView(true);", search_button)
         time.sleep(0.5)
         search_button.click()
+        _log(f"  clicked search, window_handles={len(driver.window_handles)}")
 
         time.sleep(3)
+        _log(f"  after 3s sleep, window_handles={len(driver.window_handles)}, current_url={driver.current_url!r}")
 
         WebDriverWait(driver, 20).until(lambda d: len(d.window_handles) > 1)
         driver.switch_to.window(driver.window_handles[-1])
@@ -247,7 +266,21 @@ for index, (name, posted_date) in enumerate(names_with_dates):
                 pipeline_db.add_match(name, owner_name, parcel_id, address, city, state, zip_code, posted_date)
 
     except Exception as e:
-        print(f"Error during search for {last_name}: {e}")
+        # str(e) on a bare TimeoutException is empty - that's what's been
+        # showing up as an uninformative "Message: " with no real content in
+        # every prior run's logs. type(e).__name__ plus current_url/title at
+        # the moment of failure is what actually tells us where this is
+        # dying (never finding the search box at all vs. never getting a
+        # second window to open vs. something else entirely).
+        try:
+            current_url = driver.current_url
+            title = driver.title
+        except Exception:
+            current_url, title = "<driver unusable>", "<driver unusable>"
+        _log(
+            f"Error during search for {last_name}: {type(e).__name__}: {e} "
+            f"(current_url={current_url!r}, title={title!r})"
+        )
 
     driver.quit()
 
