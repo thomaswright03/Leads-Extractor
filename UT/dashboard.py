@@ -2586,6 +2586,10 @@ TERMS_HTML = f"""<!doctype html>
   cancellation stops future billing but does not refund the current
   period, and county access continues until the end of the period already
   paid for.</p>
+  <p><strong>Per-letter charges:</strong> sending physical mail through the
+  Service is optional and billed separately from your subscription, at a
+  fixed per-letter rate, charged to the payment method on file at the time
+  each letter is sent. If that charge fails, the letter is not sent.</p>
 
   <h2>4. Acceptable Use</h2>
   <p>You agree not to: share your account or county access with anyone
