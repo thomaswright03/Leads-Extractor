@@ -14,6 +14,12 @@ import geocode
 # Path to the downloaded Excel file to process and later delete
 downloaded_excel_file = os.path.expanduser('~/Downloads/pt1091601.xls')
 download_dir = os.path.dirname(downloaded_excel_file)
+# CI runners have no desktop environment, so ~/Downloads doesn't exist by
+# default - Chrome's "download.default_directory" preference pointing at a
+# nonexistent path made every single browser launch crash instantly with an
+# empty WebDriverException (confirmed live: SLKobi.py, which sets no
+# download preference at all, ran fine in the same job).
+os.makedirs(download_dir, exist_ok=True)
 
 # Load the names to search from the shared cache (populated by SLKobi copy.py)
 names_with_dates = pipeline_db.get_obituary_names_with_dates()
