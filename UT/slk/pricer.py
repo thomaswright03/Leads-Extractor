@@ -38,14 +38,16 @@ def create_driver(eager=True):
         # Don't block driver.get() on images/ads/trackers finishing to load -
         # the WebDriverWait calls below already wait for the specific elements needed.
         options.page_load_strategy = "eager"
-    # No GPU on a CI Linux runner - without this, SLK$.py crashed instantly
-    # on every single driver.get() call (confirmed live); this script
-    # creates a fresh driver per parcel the same way, so it's exposed to
-    # the identical risk the moment there are real matches to price.
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    # get_property_value() below can also land on a page that opens a new
+    # window for ambiguous matches - Chrome's popup blocker was the real
+    # cause of SLK$.py's 100% failure rate (it silently ate the
+    # window.open() the search button fires), so this script is exposed to
+    # the same risk the moment it hits that same ambiguous-match path.
+    options.add_argument("--disable-popup-blocking")
     # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
     # handle the chromedriver binary, instead of webdriver_manager's
     # separate ChromeDriverManager().install().

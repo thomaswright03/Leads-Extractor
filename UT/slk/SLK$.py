@@ -79,14 +79,20 @@ for index, (name, posted_date) in enumerate(names_with_dates):
 
     options = webdriver.ChromeOptions()
     # options.add_argument('--headless')  # Uncomment if you want headless
-    # No GPU on a CI Linux runner - without this, Chrome crashed instantly
-    # on every single driver.get() call here (confirmed live), while
-    # SLKobi.py - which already sets this - ran fine in the same job.
     options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
     options.page_load_strategy = 'eager'
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    # The search button's onclick handler opens the results in a new window
+    # via window.open() (confirmed live: it built the right resultsMain.cfm
+    # URL every time) - Chrome's popup blocker was silently swallowing that
+    # window.open() every single run, so `len(driver.window_handles) > 1`
+    # below never became true and every search timed out with a blank
+    # TimeoutException. That's the real cause of the 100% failure rate; the
+    # earlier GPU/webdriver_manager/Downloads-dir fixes were treating a
+    # crash that wasn't actually happening.
+    options.add_argument('--disable-popup-blocking')
     options.add_experimental_option("prefs", {
         "download.default_directory": download_dir,
         "download.prompt_for_download": False,
