@@ -1,5 +1,3 @@
-import math
-import re
 import sys
 from datetime import datetime
 
@@ -36,23 +34,22 @@ OBITUARY_URL = __OBITUARY_URL__
 DATE_RANGE_BY_MODE = {"daily": "today", "weekly": "last_week"}
 obituary_url = f"{OBITUARY_URL}?date_range={DATE_RANGE_BY_MODE[MODE]}"
 
-# Every obituary card on the page is an <article> at this same parent path;
-# dropping the [N] index off "article" matches all of them in one XPath.
-NAME_XPATH = "/html/body/div[4]/div/div[2]/div/div[2]/div/article/div[1]/div/a/div/div"
+# Each obituary card is an <article data-component="PersonCardContainer">
+# (confirmed live - a prior site redesign broke the old absolute-XPath
+# version of this, which silently matched zero elements). The card's own
+# link carries the person's name right in its aria-label ("View obituary
+# details for <name>"), which is far more stable than reading visible text
+# out of a CSS-class div that's subject to the site's next redesign.
+CARD_SELECTOR = 'article[data-component="PersonCardContainer"]'
+NAME_LINK_SELECTOR = 'a[aria-label^="View obituary details for "]'
+NAME_LINK_PREFIX = "View obituary details for "
 
-# Total-results count shown above the list (e.g. "143 results") - the site
-# paginates at exactly 50 per page, so this tells us how many more pages
-# (?page=2, ?page=3, ...) to walk through beyond the first.
-RESULT_COUNT_XPATH = "/html/body/div[4]/div/div[2]/div/div[1]/div[1]"
+# The site doesn't expose a reliably-selectable "total results" count
+# element, so page until a page comes back with fewer than a full page of
+# cards (confirmed live: 50/page, last page short) rather than precomputing
+# a page count. MAX_PAGES is just a runaway safety cap.
 RESULTS_PER_PAGE = 50
-
-
-def parse_total_results(text):
-    """Pull the total result count out of whatever the count element says
-    (e.g. "143 results" or "Showing 1-50 of 143") - the largest number in
-    it is always the total, regardless of exact wording."""
-    numbers = [int(n.replace(",", "")) for n in re.findall(r"[\d,]+", text or "")]
-    return max(numbers) if numbers else None
+MAX_PAGES = 6
 
 
 # This will hold all the obituary (name, posted_date) pairs
@@ -63,36 +60,36 @@ try:
     print(f"Opening obituary page: {obituary_url}")
     driver.get(obituary_url)
 
-    try:
-        count_element = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, RESULT_COUNT_XPATH))
-        )
-        total_results = parse_total_results(count_element.text)
-    except Exception:
-        total_results = None
+    print(f"Extracting obituary names ({MODE} mode)...")
 
-    total_pages = math.ceil(total_results / RESULTS_PER_PAGE) if total_results else 1
-    print(f"Extracting obituary names ({MODE} mode) - {total_results or '?'} result(s) across {total_pages} page(s)...")
-
-    for page in range(1, total_pages + 1):
+    for page in range(1, MAX_PAGES + 1):
         if page > 1:
             page_url = f"{obituary_url}&page={page}"
             print(f"Opening page {page}: {page_url}")
             driver.get(page_url)
 
         try:
+            # Wait for the name link itself (not just the card container) -
+            # the cards mount before React hydrates their content, so
+            # waiting on the container alone raced ahead of the aria-label
+            # actually being populated and silently produced 0 names on an
+            # otherwise full page (confirmed live).
             WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, NAME_XPATH))
+                EC.presence_of_element_located((By.CSS_SELECTOR, f"{CARD_SELECTOR} {NAME_LINK_SELECTOR}"))
             )
         except Exception:
             print(f"No obituary entries found on page {page}.")
-            continue
+            break
 
-        # All 50 (or fewer, on the last page) cards are already in the DOM -
-        # no scrolling/lazy-loading needed to get at them.
+        # All cards are already in the DOM - no scrolling/lazy-loading needed.
+        cards = driver.find_elements(By.CSS_SELECTOR, CARD_SELECTOR)
         page_names = 0
-        for element in driver.find_elements(By.XPATH, NAME_XPATH):
-            name = element.text.strip()
+        for card in cards:
+            try:
+                link = card.find_element(By.CSS_SELECTOR, NAME_LINK_SELECTOR)
+                name = link.get_attribute("aria-label").replace(NAME_LINK_PREFIX, "", 1).strip()
+            except Exception:
+                continue
             if name:
                 # The date_range query param already limits results to the
                 # window we care about, so every name gets tagged with
@@ -101,6 +98,9 @@ try:
                 all_entries.append((name, TODAY.isoformat()))
                 page_names += 1
         print(f"  Page {page}: found {page_names} name(s).")
+
+        if len(cards) < RESULTS_PER_PAGE:
+            break  # short page - this was the last one
 
     print(f"Found {len(all_entries)} names total.")
 

@@ -20,8 +20,13 @@ PARCEL_URL_BASE = __PARCEL_URL_BASE__
 
 
 def assessor_url(parcel_id):
-    digits = "".join(ch for ch in (parcel_id or "") if ch.isdigit())
-    return f"{PARCEL_URL_BASE}{digits}" if digits else ""
+    # Some counties' parcel IDs carry a letter suffix that the assessor
+    # site's own search treats as significant (confirmed live for at least
+    # one county) - stripping to digits-only would silently link to the
+    # wrong parcel there, and is a no-op for counties with purely numeric
+    # IDs, so alphanumeric is the safe default either way.
+    cleaned = "".join(ch for ch in (parcel_id or "") if ch.isalnum())
+    return f"{PARCEL_URL_BASE}{cleaned}" if cleaned else ""
 
 
 def format_date_added(date_str, fmt="%Y-%m-%d %H:%M:%S"):
