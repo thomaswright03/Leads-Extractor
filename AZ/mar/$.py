@@ -34,16 +34,32 @@ def create_driver():
     return webdriver.Chrome(options=options)
 
 
+GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def _strip_suffix_clause(full_name):
+    """Obituary listing names occasionally carry a trailing rank/title
+    clause after a comma (e.g. "David J Kitchin III, Lt Col/R") - confirmed
+    live to corrupt last-name extraction (grabbing "Col/R" instead of
+    "Kitchin"), which degrades the search into matching almost any owner
+    with that first name. A comma-separated generational suffix (e.g.
+    "Robert Smith, Jr.") is kept, since that's part of the actual name."""
+    name, sep, suffix = full_name.partition(",")
+    if sep and suffix.strip().rstrip(".").lower() not in GENERATIONAL_SUFFIXES:
+        return name.strip()
+    return full_name.strip()
+
+
 def extract_last_name(full_name):
-    name_parts = full_name.strip().split()
-    if name_parts and name_parts[-1].lower().rstrip(".") in ("jr", "sr"):
+    name_parts = _strip_suffix_clause(full_name).split()
+    while name_parts and name_parts[-1].lower().rstrip(".") in GENERATIONAL_SUFFIXES:
         name_parts = name_parts[:-1]
     name_parts = re.sub(r"\(.*?\)", "", " ".join(name_parts)).split()
     return name_parts[-1] if name_parts else ""
 
 
 def extract_first_name(full_name):
-    name_parts = re.sub(r"\(.*?\)", "", full_name.strip()).split()
+    name_parts = re.sub(r"\(.*?\)", "", _strip_suffix_clause(full_name)).split()
     return name_parts[0] if name_parts else ""
 
 
