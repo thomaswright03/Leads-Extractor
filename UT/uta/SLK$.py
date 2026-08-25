@@ -27,9 +27,10 @@ SEARCH_URL = "https://www.utahcounty.gov/LandRecords/NameSearch.asp"
 AV_VALID_CURRENT = "..."
 RESULTS_PER_PAGE = 100
 
-# Jr./Sr. suffixes to skip when splitting a full name, and parenthetical
-# nicknames (e.g. "Jacob (Jake) Smith") to strip before splitting.
-SUFFIXES = {"jr", "sr"}
+# Generational suffixes to skip when splitting a full name, and
+# parenthetical nicknames (e.g. "Jacob (Jake) Smith") to strip before
+# splitting.
+SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 PAREN_PATTERN = re.compile(r"\([^)]*\)")
 
 chrome_options = uc.ChromeOptions()
@@ -59,9 +60,22 @@ def detect_chrome_major_version():
     return None
 
 
+def _strip_suffix_clause(full_name):
+    """Obituary listing names occasionally carry a trailing rank/title
+    clause after a comma (e.g. "David J Kitchin III, Lt Col/R") that isn't
+    part of the actual name - left in, it gets treated as the last word and
+    searched as a last name that doesn't exist. A comma-separated
+    generational suffix (e.g. "Robert Smith, Jr.") is kept, since that's
+    part of the actual name."""
+    name, sep, suffix = (full_name or "").partition(",")
+    if sep and suffix.strip().rstrip(".").lower() not in SUFFIXES:
+        return name.strip()
+    return (full_name or "").strip()
+
+
 def split_name(full_name):
     """Deceased's full name -> (last_name, first_name)."""
-    cleaned = PAREN_PATTERN.sub("", full_name or "").strip()
+    cleaned = PAREN_PATTERN.sub("", _strip_suffix_clause(full_name)).strip()
     words = [w for w in cleaned.split() if w.strip(".").lower() not in SUFFIXES]
     if len(words) < 2:
         return "", ""

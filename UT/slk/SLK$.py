@@ -25,12 +25,28 @@ print("Names to search:")
 for name, posted_date in names_with_dates:
     print(f"{name} ({posted_date})" if posted_date else name)
 
+GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def _strip_suffix_clause(full_name):
+    """Obituary listing names occasionally carry a trailing rank/title
+    clause after a comma (e.g. "David J Kitchin III, Lt Col/R") that isn't
+    part of the actual name - left in, it gets treated as the last word and
+    searched as a last name that doesn't exist. A comma-separated
+    generational suffix (e.g. "Robert Smith, Jr.") is kept, since that's
+    part of the actual name."""
+    name, sep, suffix = full_name.partition(",")
+    if sep and suffix.strip().rstrip(".").lower() not in GENERATIONAL_SUFFIXES:
+        return name.strip()
+    return full_name.strip()
+
+
 def extract_last_name(full_name):
-    name_parts = full_name.strip().split()
-    if name_parts[-1].lower() in ['jr.', 'sr.']:
-        return name_parts[-2]
+    name_parts = _strip_suffix_clause(full_name).split()
+    while name_parts and name_parts[-1].lower().rstrip(".") in GENERATIONAL_SUFFIXES:
+        name_parts = name_parts[:-1]
     name_parts = re.sub(r'\(.*\)$', '', ' '.join(name_parts)).split()
-    return name_parts[-1]
+    return name_parts[-1] if name_parts else ''
 
 def safe_click(driver, element):
     """Scroll an element into view and click it, falling back to a JS click
@@ -44,7 +60,7 @@ def safe_click(driver, element):
 
 
 def extract_first_name(full_name):
-    name_parts = full_name.strip().split()
+    name_parts = _strip_suffix_clause(full_name).split()
     if len(name_parts) > 1:
         return name_parts[0].capitalize()
     return ''
