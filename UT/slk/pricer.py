@@ -6,11 +6,9 @@ import time
 
 import pandas as pd
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 import pipeline_db
 
@@ -40,10 +38,18 @@ def create_driver(eager=True):
         # Don't block driver.get() on images/ads/trackers finishing to load -
         # the WebDriverWait calls below already wait for the specific elements needed.
         options.page_load_strategy = "eager"
+    # No GPU on a CI Linux runner - without this, SLK$.py crashed instantly
+    # on every single driver.get() call (confirmed live); this script
+    # creates a fresh driver per parcel the same way, so it's exposed to
+    # the identical risk the moment there are real matches to price.
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
+    # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
+    # handle the chromedriver binary, instead of webdriver_manager's
+    # separate ChromeDriverManager().install().
+    return webdriver.Chrome(options=options)
 
 
 def get_property_value(driver, parcel_id):
