@@ -166,6 +166,26 @@ def get_county_owner(county):
     return result.data[0]["email"] if result.data else None
 
 
+def get_active_customer_id(kind, key):
+    """The Stripe customer id behind the currently-active subscription for
+    this plan, or None (e.g. an admin testing an unclaimed county, or an
+    account granted access by hand rather than through checkout) - used to
+    bill one-off per-letter charges to the same card the subscription
+    already uses."""
+    result = (
+        _get_client()
+        .table("subscriptions")
+        .select("stripe_customer_id")
+        .eq("kind", kind)
+        .eq("key", key)
+        .eq("status", "active")
+        .order("id", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0]["stripe_customer_id"] if result.data else None
+
+
 def get_state_grants_for_user(email):
     """State abbreviations (e.g. "UT") this email has whole-state access to,
     from buying the state bundle rather than individual counties. The caller

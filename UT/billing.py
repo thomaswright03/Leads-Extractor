@@ -82,6 +82,44 @@ def create_checkout_session(email, kind, key, success_url, cancel_url):
     return session["url"]
 
 
+# Lob's base rate for the letter type this platform sends (standard,
+# black & white, single page, First Class) is $0.658/letter - charged per
+# letter with a 10% markup, on top of the flat monthly county subscription.
+# The county's letter feature is optional; this is what it costs when
+# actually used.
+LOB_LETTER_COST_CENTS = 66  # $0.658/letter, rounded to the nearest cent
+LETTER_PRICE_CENTS = round(LOB_LETTER_COST_CENTS * 1.10)  # $0.73/letter
+
+
+def _get_default_payment_method(customer_id):
+    """The payment method already on file for this customer from their
+    subscription checkout - reused for one-off per-letter charges instead
+    of asking them to enter a card again."""
+    customer = _stripe_request("GET", f"customers/{customer_id}")
+    payment_method = (customer.get("invoice_settings") or {}).get("default_payment_method")
+    return payment_method or customer.get("default_source")
+
+
+def charge_for_letter(customer_id, description):
+    """One-off charge for sending a single letter, billed to the same card
+    the agent's subscription already uses - separate from that recurring
+    subscription charge. Raises BillingError if there's no payment method
+    on file or the charge is declined; callers must not send the letter
+    through Lob if this raises, so a failed charge never mails for free."""
+    payment_method = _get_default_payment_method(customer_id)
+    if not payment_method:
+        raise BillingError("No payment method on file for this account.")
+    return _stripe_request("POST", "payment_intents", {
+        "amount": LETTER_PRICE_CENTS,
+        "currency": "usd",
+        "customer": customer_id,
+        "payment_method": payment_method,
+        "off_session": "true",
+        "confirm": "true",
+        "description": description,
+    })
+
+
 def _verify_webhook_signature(payload_bytes, sig_header):
     """Stripe's own signature scheme, implemented by hand instead of pulling
     in the stripe pip package for just this: the Stripe-Signature header is

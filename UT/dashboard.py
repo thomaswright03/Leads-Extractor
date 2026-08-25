@@ -2468,6 +2468,20 @@ def handle_send_letter(payload, sender_email=None):
                 from_address=from_address,
             )
 
+    # The monthly county fee is for data access - sending a letter is a
+    # separate, optional, per-use charge on top, billed to the same card
+    # the county owner's subscription already uses. An admin testing an
+    # unclaimed county (owner_email is None) has no subscription to bill,
+    # so that case is left free rather than blocked.
+    if owner_email:
+        customer_id = pipeline_db.get_active_customer_id("county", county)
+        if not customer_id:
+            return 402, {"error": "No active subscription/payment method found for this county - can't send a letter."}
+        try:
+            billing.charge_for_letter(customer_id, f"Letter fee - {county} - {full_name}")
+        except billing.BillingError as e:
+            return 402, {"error": f"Payment failed, letter not sent: {e}"}
+
     try:
         result = send()
     except mailer.MailerConfigError as e:
