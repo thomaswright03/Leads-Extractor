@@ -1,8 +1,6 @@
 import pandas as pd
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
 import time
 import re
 from selenium.webdriver.support.ui import WebDriverWait
@@ -68,8 +66,12 @@ for index, (name, posted_date) in enumerate(names_with_dates):
         "safebrowsing.enabled": True,
     })
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
+    # handle the chromedriver binary - switched from webdriver_manager's
+    # ChromeDriverManager().install(), which started failing every single
+    # search silently in CI (confirmed live: SLKobi.py in this same
+    # workflow, which never used webdriver_manager, kept working fine).
+    driver = webdriver.Chrome(options=options)
 
     try:
         driver.get("https://www.saltlakecounty.gov/assessor/")

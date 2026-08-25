@@ -6,10 +6,8 @@ import time
 
 import pandas as pd
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from webdriver_manager.chrome import ChromeDriverManager
 
 import pipeline_db
 
@@ -40,11 +38,15 @@ def get_last_run():
 
 
 def create_driver():
+    # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
+    # handle the chromedriver binary - webdriver_manager's separate
+    # ChromeDriverManager().install() has been seen failing every single
+    # call in CI (confirmed live for UT/slk's equivalent script), so this
+    # avoids that whole failure mode rather than working around it.
     options = webdriver.ChromeOptions()
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
+    return webdriver.Chrome(options=options)
 
 
 def _has_not_found_alert(driver):
