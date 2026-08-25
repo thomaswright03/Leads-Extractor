@@ -120,6 +120,18 @@ def charge_for_letter(customer_id, description):
     })
 
 
+def refund_letter_charge(payment_intent_id):
+    """Best-effort refund of a per-letter charge whose letter then failed to
+    actually send via Lob - called after the fact, so a failure here is
+    logged rather than raised (the caller already has a 502 to return for
+    the real problem, the failed send, and refunding is a side effect of
+    that, not the thing the request is failing on)."""
+    try:
+        _stripe_request("POST", "refunds", {"payment_intent": payment_intent_id})
+    except BillingError as e:
+        print(f"WARNING: failed to refund letter charge {payment_intent_id} after a failed send: {e}")
+
+
 def _verify_webhook_signature(payload_bytes, sig_header):
     """Stripe's own signature scheme, implemented by hand instead of pulling
     in the stripe pip package for just this: the Stripe-Signature header is

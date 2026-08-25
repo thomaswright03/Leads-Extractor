@@ -911,6 +911,13 @@ TEMPLATE = """<!doctype html>
     padding: 8px 12px;
   }
   .letter-warning.show { display: block; }
+  .letter-price-note {
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--panel-2, #f4efe4);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
   .letter-result {
     display: none;
     font-size: 12.5px;
@@ -1344,11 +1351,12 @@ TEMPLATE = """<!doctype html>
       <div class="letter-warning" id="letter-address-warning">
         This lead is missing City or Zip &mdash; the address is incomplete and can&rsquo;t be mailed until that&rsquo;s filled in.
       </div>
+      <div class="letter-price-note" id="letter-price-note"></div>
       <div class="letter-result" id="letter-result"></div>
     </div>
     <div class="modal-actions">
       <button type="button" class="ghost" id="letter-cancel">Cancel</button>
-      <button type="button" class="primary" id="letter-send">Send Letter (Test Mode)</button>
+      <button type="button" class="primary" id="letter-send">Send Letter</button>
     </div>
   </div>
 </div>
@@ -1366,11 +1374,12 @@ TEMPLATE = """<!doctype html>
       <label>Leads added in the last 7 days without a letter on record</label>
       <div class="bulk-list" id="bulk-list"></div>
 
+      <div class="letter-price-note" id="bulk-price-note"></div>
       <div class="letter-result" id="bulk-result"></div>
     </div>
     <div class="modal-actions">
       <button type="button" class="ghost" id="bulk-cancel">Cancel</button>
-      <button type="button" class="primary" id="bulk-send" disabled>Send Letters (Test Mode)</button>
+      <button type="button" class="primary" id="bulk-send" disabled>Send Letters</button>
     </div>
   </div>
 </div>
@@ -1406,6 +1415,29 @@ TEMPLATE = """<!doctype html>
   const confirmed = leadData.confirmed;
   const templates = leadData.templates;
   const pdfTemplates = leadData.pdfTemplates || [];
+  const letterPriceCents = leadData.letterPriceCents || 0;
+  const lobTestMode = !!leadData.lobTestMode;
+  const letterPriceDollars = (letterPriceCents / 100).toFixed(2);
+
+  // Lob test mode never actually mails anything, so nothing is charged for
+  // it either (see handle_send_letter in dashboard.py) - the note and
+  // button label need to say that plainly rather than quote a price that
+  // won't actually be billed.
+  function letterChargeNote(count) {
+    if (lobTestMode) {
+      return `Lob test mode: ${count > 1 ? 'these letters are' : 'this letter is'} simulated only — nothing will be mailed and your card will not be charged.`;
+    }
+    const total = ((letterPriceCents * count) / 100).toFixed(2);
+    return count > 1
+      ? `Sending will charge $${letterPriceDollars} per letter ($${total} total for ${count}) to the card on file, on top of your monthly subscription.`
+      : `Sending will charge $${letterPriceDollars} to the card on file, on top of your monthly subscription.`;
+  }
+
+  function letterSendLabel(count) {
+    if (lobTestMode) return count > 1 ? 'Send Letters (Test Mode)' : 'Send Letter (Test Mode)';
+    const total = ((letterPriceCents * count) / 100).toFixed(2);
+    return count > 1 ? `Send Letters ($${total})` : `Send Letter ($${letterPriceDollars})`;
+  }
 
   // Looks up a template by id across both the built-in merge-field
   // templates and company-uploaded PDF templates, tagging which kind it is
@@ -1534,6 +1566,7 @@ TEMPLATE = """<!doctype html>
   const templateSelect = document.getElementById('letter-template-select');
   const messageBox = document.getElementById('letter-message');
   const addressWarning = document.getElementById('letter-address-warning');
+  const priceNote = document.getElementById('letter-price-note');
   const letterResult = document.getElementById('letter-result');
   const sendBtn = document.getElementById('letter-send');
 
@@ -1560,6 +1593,8 @@ TEMPLATE = """<!doctype html>
     fillMessageFromTemplate();
     const complete = hasCompleteAddress(lead);
     addressWarning.classList.toggle('show', !complete);
+    priceNote.textContent = letterChargeNote(1);
+    sendBtn.textContent = letterSendLabel(1);
     sendBtn.disabled = !complete;
     modalBackdrop.classList.add('open');
   }
@@ -1629,7 +1664,7 @@ TEMPLATE = """<!doctype html>
       letterResult.textContent = err.message;
     } finally {
       sendBtn.disabled = false;
-      sendBtn.textContent = 'Send Letter (Test Mode)';
+      sendBtn.textContent = letterSendLabel(1);
     }
   });
 
@@ -1638,6 +1673,7 @@ TEMPLATE = """<!doctype html>
   const bulkTemplateSelect = document.getElementById('bulk-template-select');
   const bulkList = document.getElementById('bulk-list');
   const bulkResult = document.getElementById('bulk-result');
+  const bulkPriceNote = document.getElementById('bulk-price-note');
   const bulkSendBtn = document.getElementById('bulk-send');
 
   populateTemplateSelect(bulkTemplateSelect);
@@ -1669,6 +1705,7 @@ TEMPLATE = """<!doctype html>
     if (!eligible.length) {
       bulkList.appendChild(el('div', 'bulk-empty', 'No leads from the last 7 days are waiting on a letter.'));
       bulkSendBtn.disabled = true;
+      bulkPriceNote.textContent = '';
       return;
     }
     eligible.forEach(lead => {
@@ -1688,8 +1725,10 @@ TEMPLATE = """<!doctype html>
   }
 
   function updateBulkSendState() {
-    const anyChecked = Array.from(bulkSelection.values()).some(row => row.querySelector('input').checked);
-    bulkSendBtn.disabled = !anyChecked;
+    const checkedCount = Array.from(bulkSelection.values()).filter(row => row.querySelector('input').checked).length;
+    bulkSendBtn.disabled = checkedCount === 0;
+    bulkPriceNote.textContent = checkedCount > 0 ? letterChargeNote(checkedCount) : '';
+    bulkSendBtn.textContent = letterSendLabel(checkedCount || 1);
   }
 
   function openBulkModal() {
@@ -1743,7 +1782,7 @@ TEMPLATE = """<!doctype html>
     bulkResult.classList.add('show', failures.length ? 'error' : 'ok');
     bulkResult.textContent = failures.length
       ? `Sent ${sentCount}, failed ${failures.length}. ${failures.join(' | ')}`
-      : `Sent all ${sentCount} letters (Lob test mode).`;
+      : `Sent all ${sentCount} letters${lobTestMode ? ' (Lob test mode).' : '.'}`;
     repaintConfirmed();
     bulkTemplateSelect.disabled = false;
     updateBulkSendState();
@@ -2339,6 +2378,8 @@ def build_dashboard_html(authenticated=False, email=None):
         "pdfTemplates": pdf_templates,
         "counties": counties,
         "pricingPlans": pricing_plans,
+        "letterPriceCents": billing.LETTER_PRICE_CENTS,
+        "lobTestMode": mailer.is_test_mode(),
     }
 
     if not authenticated:
@@ -2473,20 +2514,33 @@ def handle_send_letter(payload, sender_email=None):
     # the county owner's subscription already uses. An admin testing an
     # unclaimed county (owner_email is None) has no subscription to bill,
     # so that case is left free rather than blocked.
-    if owner_email:
+    letter_charge_id = None
+    # Lob test mode never actually mails anything - it's purely a
+    # send()-succeeds-but-nothing-goes-out sandbox - so there's nothing to
+    # charge for regardless of whose county this is.
+    if owner_email and not mailer.is_test_mode():
         customer_id = pipeline_db.get_active_customer_id("county", county)
         if not customer_id:
             return 402, {"error": "No active subscription/payment method found for this county - can't send a letter."}
         try:
-            billing.charge_for_letter(customer_id, f"Letter fee - {county} - {full_name}")
+            charge = billing.charge_for_letter(customer_id, f"Letter fee - {county} - {full_name}")
+            letter_charge_id = charge.get("id")
         except billing.BillingError as e:
             return 402, {"error": f"Payment failed, letter not sent: {e}"}
 
     try:
         result = send()
     except mailer.MailerConfigError as e:
+        # Nothing was charged for a config error (it's raised before ever
+        # calling Lob), so no refund needed here.
         return 400, {"error": str(e)}
     except mailer.LobAPIError as e:
+        # The letter fee was already charged above (has to be, so a failed
+        # charge blocks the send) - since Lob then failed to actually mail
+        # anything, refund it rather than leave the agent paying for a
+        # letter that never went out.
+        if letter_charge_id:
+            billing.refund_letter_charge(letter_charge_id)
         pipeline_db.record_letter_sent(
             county, full_name, owner_name, parcel_id, template_id, message,
             status="failed", test_mode=mailer.is_test_mode(), error=str(e),
