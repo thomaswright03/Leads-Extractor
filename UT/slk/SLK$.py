@@ -227,17 +227,26 @@ for index, (name, posted_date) in enumerate(names_with_dates):
         safe_click(driver, excel_link)
         print("Clicked the 'MS Excel Document' link.")
 
-        # Also confirmed broken live (matches zero elements): clicking the
-        # link above runs showExcel(), a jQuery AJAX call that replaces
-        # #excel's content with a fresh <a href="....xls"><img></a> - a
-        # stable id selector into that div, not another absolute path into
-        # dynamically-inserted content.
-        download_img = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "#excel img"))
-        )
-        time.sleep(1)
-        safe_click(driver, download_img)
-        print("Clicked the download image button.")
+        # Clicking the link above runs showExcel(), a jQuery AJAX call that
+        # briefly replaces #excel's content with a real <a href="....xls">
+        # <img></a> plus a live "link expires in N seconds" countdown -
+        # confirmed live that once it hits 0, the whole subtree reverts back
+        # to a loading spinner, which is what was making the previous
+        # click-the-image approach fail with StaleElementReferenceException
+        # (the element could vanish mid-click, or between finding it and
+        # clicking it, since WebDriverWait doesn't retry on that exception
+        # by default). The resolved href itself is stable the whole time, so
+        # read it and navigate straight there instead of racing a click
+        # against a self-destructing countdown widget.
+        def _find_download_href(d):
+            try:
+                return d.find_element(By.CSS_SELECTOR, "#excel a").get_attribute("href")
+            except Exception:
+                return None
+
+        download_url = WebDriverWait(driver, 10).until(_find_download_href)
+        driver.get(download_url)
+        print(f"Navigated to the download link: {download_url}")
 
         # Wait for the download to actually land instead of guessing a fixed delay
         wait_seconds, poll_interval, elapsed = 20, 0.5, 0
