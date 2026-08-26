@@ -2661,6 +2661,12 @@ TERMS_HTML = f"""<!doctype html>
   through the Service - complies with all applicable federal, state, and
   local laws, including any laws specific to contacting individuals in
   connection with a probate or estate matter.</p>
+  <p>Leads are matched and confirmed using automated processes, including
+  automated comparison of names and records. These processes are not
+  perfect, do not achieve a 100% success or accuracy rate, and can
+  produce incorrect, incomplete, or mismatched results. You should
+  independently verify a lead's underlying information before relying on
+  it or contacting anyone.</p>
 
   <h2>6. Intellectual Property</h2>
   <p>The Service, including its software, design, and compiled lead
