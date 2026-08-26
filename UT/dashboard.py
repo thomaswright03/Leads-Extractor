@@ -726,6 +726,7 @@ TEMPLATE = """<!doctype html>
   }
   .badge.confirmed { background: var(--confirmed-bg); color: var(--confirmed-ink); }
   .badge.review { background: var(--review-bg); color: var(--review-ink); }
+  .badge.taken { background: rgba(112,123,141,0.14); color: var(--muted); }
   a.link {
     color: var(--heading);
     text-decoration: none;
@@ -1158,6 +1159,9 @@ TEMPLATE = """<!doctype html>
   .plan-option input { width: auto; accent-color: var(--gold-deep); }
   .plan-option .plan-label { flex: 1; font-size: 13.5px; font-weight: 500; color: var(--ink); }
   .plan-option .plan-price { font-size: 13px; font-weight: 700; color: var(--heading); }
+  .plan-option.is-taken { cursor: not-allowed; opacity: 0.6; background: var(--panel-2, #f2f2f2); }
+  .plan-option.is-taken:hover { border-color: var(--border); }
+  .plan-option.is-taken .plan-label { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -2016,12 +2020,14 @@ TEMPLATE = """<!doctype html>
 
   (leadData.pricingPlans || []).forEach(plan => {
     const alreadyOwned = plan.kind === 'county' && ownedCountyFolders.has(plan.key);
-    const btn = el('button', 'ghost', alreadyOwned
-      ? `${plan.label} — Active`
-      : `${plan.label} — $${(plan.priceCents / 100).toFixed(2)}/mo`);
+    const takenByOther = plan.taken && !alreadyOwned;
+    const label = alreadyOwned ? `${plan.label} — Active`
+      : takenByOther ? `${plan.label} — Taken`
+      : `${plan.label} — $${(plan.priceCents / 100).toFixed(2)}/mo`;
+    const btn = el('button', 'ghost', label);
     btn.type = 'button';
-    btn.disabled = alreadyOwned;
-    if (!alreadyOwned) {
+    btn.disabled = alreadyOwned || takenByOther;
+    if (!alreadyOwned && !takenByOther) {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         addAccessResult.classList.remove('show', 'ok', 'error');
@@ -2238,17 +2244,26 @@ TEMPLATE = """<!doctype html>
     loginForm.style.display = 'block';
   });
 
-  (leadData.pricingPlans || []).forEach((plan, i) => {
+  let firstAvailableChecked = false;
+  (leadData.pricingPlans || []).forEach((plan) => {
     const option = document.createElement('label');
-    option.className = 'plan-option';
+    option.className = 'plan-option' + (plan.taken ? ' is-taken' : '');
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = 'signup-plan';
     radio.value = `${plan.kind}:${plan.key}`;
-    if (i === 0) radio.checked = true;
+    radio.disabled = !!plan.taken;
+    if (!plan.taken && !firstAvailableChecked) {
+      radio.checked = true;
+      firstAvailableChecked = true;
+    }
     option.appendChild(radio);
     option.appendChild(el('span', 'plan-label', plan.label));
-    option.appendChild(el('span', 'plan-price', `$${(plan.priceCents / 100).toFixed(2)}/mo`));
+    if (plan.taken) {
+      option.appendChild(el('span', 'badge taken', 'Taken'));
+    } else {
+      option.appendChild(el('span', 'plan-price', `$${(plan.priceCents / 100).toFixed(2)}/mo`));
+    }
     signupPlansDiv.appendChild(option);
   });
 
@@ -2361,14 +2376,18 @@ def build_dashboard_html(authenticated=False, email=None):
     # everything else above this is loaded regardless of auth state - the
     # sign-up form on the logged-out login screen needs it to show plan
     # choices before anyone has an account yet.
-    # One agent per county: state-bundle plans are no longer offered, and a
-    # county already assigned to someone drops out of the list entirely
-    # rather than showing as disabled - nothing left to sell once it's taken.
+    # One agent per county: state-bundle plans are no longer offered. A
+    # taken county stays in the list (marked taken) rather than disappearing
+    # - showing the full footprint of counties is a deliberate marketing
+    # choice, not just what's currently purchasable.
     taken_counties = pipeline_db.get_taken_counties()
     pricing_plans = [
-        {"kind": p["kind"], "key": p["key"], "label": p["label"], "priceCents": p["monthly_price_cents"]}
+        {
+            "kind": p["kind"], "key": p["key"], "label": p["label"], "priceCents": p["monthly_price_cents"],
+            "taken": p["key"] in taken_counties,
+        }
         for p in pipeline_db.get_pricing_plans()
-        if p["kind"] == "county" and p["key"] not in taken_counties
+        if p["kind"] == "county"
     ]
 
     counties = [{"folder": c["folder"], "label": c["label"]} for c in visible_counties]
@@ -2622,10 +2641,12 @@ TERMS_HTML = f"""<!doctype html>
   account management features.</p>
 
   <h2>2. Eligibility &amp; Accounts</h2>
-  <p>Accounts may only be created by an email address we've explicitly
-  invited. You're responsible for maintaining the confidentiality of your
-  login credentials and for all activity under your account. You must
-  provide accurate business/return-address information at signup, since
+  <p>Anyone may create an account, but a county subscription is only
+  available while that county is unclaimed - once an agent subscribes to a
+  county, it's held exclusively by that agent and isn't available to any
+  other subscriber. You're responsible for maintaining the confidentiality
+  of your login credentials and for all activity under your account. You
+  must provide accurate business/return-address information at signup, since
   it's printed on mail sent through the Service.</p>
 
   <h2>3. Subscriptions, Billing &amp; Cancellation</h2>
@@ -2992,17 +3013,12 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
 
-        if not pipeline_db.is_email_invited(email):
-            self._send_json(403, {"error": "This email hasn't been invited yet. Contact us for access."})
-            return
-
         try:
             signed_up_email = auth.sign_up(email, password)
         except auth.SignupError as e:
             self._send_json(400, {"error": str(e)})
             return
 
-        pipeline_db.mark_invite_redeemed(signed_up_email)
         pipeline_db.set_mailing_profile(
             signed_up_email, from_name, from_address1, from_address2, from_city, from_state, from_zip,
         )

@@ -306,27 +306,6 @@ def set_mailing_profile(email, from_name, from_address1, from_address2, from_cit
     }, on_conflict="email").execute()
 
 
-def is_email_invited(email):
-    """Gate for the public signup form: only emails added by hand to
-    invited_emails (Supabase Table Editor) are allowed to create an account."""
-    if not email:
-        return False
-    result = (
-        _get_client()
-        .table("invited_emails")
-        .select("email")
-        .eq("email", email.strip().lower())
-        .execute()
-    )
-    return bool(result.data)
-
-
-def mark_invite_redeemed(email):
-    _get_client().table("invited_emails").update(
-        {"redeemed_at": datetime.now(timezone.utc).isoformat()}
-    ).eq("email", email.strip().lower()).execute()
-
-
 def get_latest_letters_sent():
     """Latest send attempt per (county, full_name, parcel_id), keyed the same
     way dashboard.py keys its merged, multi-county confirmed-leads list."""
