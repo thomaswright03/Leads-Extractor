@@ -12,16 +12,44 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
+import auth
 import pipeline_db
 
 STRIPE_API_URL = "https://api.stripe.com/v1"
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+
+# A brand-new signup's Supabase account isn't created until Stripe confirms
+# payment (see handle_webhook_event below) - so the signup form's data has
+# to be held somewhere between "form submitted" and "webhook lands".
+# In-memory only, same tradeoff as dashboard.py's SESSIONS dict: it resets
+# on a Render redeploy, which would lose a signup that's mid-checkout at
+# that exact moment (rare - a redeploy overlapping the seconds between
+# submitting the form and finishing Stripe's hosted checkout page).
+PENDING_SIGNUPS = {}
+
+
+def stash_pending_signup(data):
+    """data is the raw signup form fields (email, password, mailing
+    address). Returns a token to pass through Stripe as checkout metadata
+    and back to the frontend as a success_url query param."""
+    token = secrets.token_urlsafe(32)
+    PENDING_SIGNUPS[token] = {**data, "resolved_email": None}
+    return token
+
+
+def get_pending_signup(token):
+    return PENDING_SIGNUPS.get(token)
+
+
+def pop_pending_signup(token):
+    return PENDING_SIGNUPS.pop(token, None)
 
 
 class BillingError(Exception):
@@ -57,15 +85,18 @@ def _stripe_request(method, path, data=None):
         raise BillingError(f"Couldn't reach Stripe: {e.reason}") from e
 
 
-def create_checkout_session(email, kind, key, success_url, cancel_url):
+def create_checkout_session(email, kind, key, success_url, cancel_url, extra_metadata=None):
     """kind is 'county' or 'state_bundle', key is the county folder or state
-    abbreviation. Returns the Checkout Session's hosted URL to redirect the
+    abbreviation. extra_metadata (e.g. a pending-signup token) is stamped
+    onto the Checkout Session alongside the standard fields, so
+    handle_webhook_event can read it back off obj["metadata"] once payment
+    is confirmed. Returns the Checkout Session's hosted URL to redirect the
     browser to."""
     plan = pipeline_db.get_pricing_plan(kind, key)
     if not plan or not plan.get("stripe_price_id"):
         raise BillingError("That plan isn't set up yet.")
 
-    session = _stripe_request("POST", "checkout/sessions", {
+    fields = {
         "mode": "subscription",
         "customer_email": email,
         "line_items[0][price]": plan["stripe_price_id"],
@@ -78,7 +109,11 @@ def create_checkout_session(email, kind, key, success_url, cancel_url):
         "subscription_data[metadata][email]": email,
         "subscription_data[metadata][kind]": kind,
         "subscription_data[metadata][key]": key,
-    })
+    }
+    for meta_key, meta_value in (extra_metadata or {}).items():
+        fields[f"metadata[{meta_key}]"] = meta_value
+
+    session = _stripe_request("POST", "checkout/sessions", fields)
     return session["url"]
 
 
@@ -175,6 +210,31 @@ def handle_webhook_event(payload_bytes, sig_header):
         key = metadata.get("key")
         subscription_id = obj.get("subscription")
         customer_id = obj.get("customer")
+
+        # For a brand-new signup (see dashboard.py's _handle_signup /
+        # stash_pending_signup above), payment has just cleared - only now
+        # is it safe to actually create the Supabase account and mailing
+        # profile. An existing agent adding another county never has this
+        # metadata key, so this is a no-op for them.
+        pending_token = metadata.get("pending_signup_token")
+        if pending_token:
+            pending = PENDING_SIGNUPS.get(pending_token)
+            if pending:
+                try:
+                    auth.sign_up(pending["email"], pending["password"])
+                except auth.SignupError as e:
+                    # Most likely a duplicate concurrent checkout for the
+                    # same brand-new email (e.g. a double-click or two
+                    # tabs) - the account already exists from the other one,
+                    # so payment is still honored below rather than lost.
+                    print(f"NOTE: signup webhook found an existing account for {pending['email']} ({e}); continuing since payment already cleared.")
+                pipeline_db.set_mailing_profile(
+                    pending["email"], pending["from_name"], pending["from_address1"],
+                    pending["from_address2"], pending["from_city"], pending["from_state"],
+                    pending["from_zip"],
+                )
+                pending["resolved_email"] = pending["email"]
+
         if email and kind == "county" and key and subscription_id:
             # Belt-and-suspenders re-check: the /api endpoints already block
             # buying a taken county, but two checkouts for the same county

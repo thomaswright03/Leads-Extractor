@@ -1267,6 +1267,13 @@ TEMPLATE = """<!doctype html>
     <div class="login-error" id="signup-error"></div>
     <p class="switch-link">Already have an account? <a href="#" id="show-login-link">Log in</a></p>
   </form>
+
+  <div class="login-card" id="checkout-pending-card" style="display:none;">
+    <div class="mark"></div>
+    <h1>Confirming Your Payment</h1>
+    <p class="sub">This only takes a few seconds - hang tight.</p>
+    <div class="login-error" id="checkout-pending-error"></div>
+  </div>
 </div>
 
 <div id="app-content" style="display:none;">
@@ -2274,6 +2281,54 @@ TEMPLATE = """<!doctype html>
     });
   }
 
+  // --- Claim a signup session after returning from Stripe checkout ---
+  // A brand-new signup's Supabase account isn't created until Stripe
+  // confirms payment (see billing.handle_webhook_event), which can land a
+  // moment after this redirect - so this polls rather than assuming the
+  // account (and a session for it) is ready the instant the browser is
+  // back on our own domain.
+  const signupToken = !SERVER_AUTHENTICATED && new URLSearchParams(window.location.search).get('signup_token');
+  if (signupToken) {
+    const loginFormEl = document.getElementById('login-form');
+    const signupFormEl = document.getElementById('signup-form');
+    const pendingCard = document.getElementById('checkout-pending-card');
+    const pendingError = document.getElementById('checkout-pending-error');
+    loginFormEl.style.display = 'none';
+    signupFormEl.style.display = 'none';
+    pendingCard.style.display = 'block';
+
+    let attempts = 0;
+    const maxAttempts = 14; // ~20s at 1.5s apart
+    const tryClaimSession = async () => {
+      attempts += 1;
+      try {
+        const response = await fetch('/api/claim-signup-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: signupToken }),
+        });
+        if (response.status === 200) {
+          window.location.href = '/';
+          return;
+        }
+        if (response.status === 404) {
+          pendingError.textContent = 'This signup link has expired or was already used.';
+          pendingError.classList.add('show');
+          return;
+        }
+      } catch (err) {
+        // Network hiccup - fall through to retry below.
+      }
+      if (attempts < maxAttempts) {
+        setTimeout(tryClaimSession, 1500);
+      } else {
+        pendingError.textContent = 'Payment received! Finishing setup is taking longer than expected - log in with the email and password you just created.';
+        pendingError.classList.add('show');
+      }
+    };
+    tryClaimSession();
+  }
+
   // --- Sign up (public paid path - separate from the admin-added accounts above) ---
   const signupForm = document.getElementById('signup-form');
   const signupError = document.getElementById('signup-error');
@@ -3222,6 +3277,10 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_signup(raw_body)
             return
 
+        if self.path == "/api/claim-signup-session":
+            self._handle_claim_signup_session(raw_body)
+            return
+
         if self.path == "/api/logout":
             destroy_session(self)
             self._send_json(200, {"ok": True}, clear_cookie=True)
@@ -3352,37 +3411,66 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
 
-        try:
-            signed_up_email = auth.sign_up(email, password)
-        except auth.SignupError as e:
-            self._send_json(400, {"error": str(e)})
+        # A mailing profile only ever exists alongside a real account under
+        # this flow (both are created together once payment clears, below),
+        # so this doubles as the "email already registered" check without
+        # needing a Supabase admin lookup.
+        if pipeline_db.get_mailing_profile(email):
+            self._send_json(400, {"error": "An account with that email already exists - please log in instead."})
             return
 
-        pipeline_db.set_mailing_profile(
-            signed_up_email, from_name, from_address1, from_address2, from_city, from_state, from_zip,
-        )
-        token = create_session(signed_up_email)
+        # No Supabase account is created here. It's only created once Stripe
+        # confirms payment (see billing.handle_webhook_event) - that way an
+        # abandoned or declined checkout never leaves a real, logged-in
+        # account behind with nothing paid for. The signup form's data is
+        # held in memory under this token until the webhook resolves it.
+        pending_token = billing.stash_pending_signup({
+            "email": email, "password": password, "from_name": from_name,
+            "from_address1": from_address1, "from_address2": from_address2,
+            "from_city": from_city, "from_state": from_state, "from_zip": from_zip,
+        })
 
         base_url = self._base_url()
         try:
             checkout_url = billing.create_checkout_session(
-                signed_up_email, kind, key,
-                success_url=f"{base_url}/?checkout=success",
+                email, kind, key,
+                success_url=f"{base_url}/?checkout=success&signup_token={pending_token}",
                 cancel_url=f"{base_url}/?checkout=cancel",
+                extra_metadata={"pending_signup_token": pending_token},
             )
         except billing.BillingError as e:
-            # Account/profile/session already exist even though checkout
-            # didn't start - they can retry from inside the dashboard rather
-            # than losing the signup entirely.
-            self._send_json(
-                200,
-                {"ok": True, "email": signed_up_email, "checkoutUrl": None,
-                 "error": f"Account created, but couldn't start checkout: {e}"},
-                set_cookie=token,
-            )
+            billing.pop_pending_signup(pending_token)
+            self._send_json(400, {"error": f"Couldn't start checkout: {e}"})
             return
 
-        self._send_json(200, {"ok": True, "email": signed_up_email, "checkoutUrl": checkout_url}, set_cookie=token)
+        self._send_json(200, {"ok": True, "checkoutUrl": checkout_url})
+
+    def _handle_claim_signup_session(self, raw_body):
+        """Polled by the frontend after Stripe redirects back from checkout
+        for a brand-new signup. The account doesn't exist until the webhook
+        (a separate, async server-to-server call from Stripe) has landed and
+        resolved the pending signup below - which can be a moment after this
+        redirect - so this can legitimately return "still pending" a few
+        times before it succeeds."""
+        try:
+            payload = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON body"})
+            return
+
+        token = str(payload.get("token", "")).strip()
+        pending = billing.get_pending_signup(token) if token else None
+        if not pending:
+            self._send_json(404, {"error": "Signup session not found or already used."})
+            return
+        if not pending.get("resolved_email"):
+            self._send_json(202, {"pending": True})
+            return
+
+        email = pending["resolved_email"]
+        billing.pop_pending_signup(token)
+        session_token = create_session(email)
+        self._send_json(200, {"ok": True, "email": email}, set_cookie=session_token)
 
     def _base_url(self):
         host = self.headers.get("Host", f"127.0.0.1:{PORT}")
