@@ -191,6 +191,48 @@ def handle_upload_pdf_template(fields):
     return 200, {"id": template_id, "filename": filename}
 
 
+def handle_generate_pdf_template(fields):
+    """Builds a designed PDF from the template-creation wizard's answers
+    (see pdf_merge.generate_letter_pdf) and registers it exactly like an
+    uploaded PDF template - including the name-placement position, computed
+    directly from the layout instead of requiring the usual manual
+    click-to-place step."""
+    company_name = str(fields.get("companyName", "")).strip()
+    template_name = str(fields.get("templateName", "")).strip()
+    business_name = str(fields.get("businessName", "")).strip()
+    if not company_name or not template_name or not business_name:
+        return 400, {"error": "Business name and template name are required."}
+
+    angles = [a for a in str(fields.get("angles", "")).split(",") if a]
+    logo_field = fields.get("logo")
+    logo_bytes = logo_field["content"] if isinstance(logo_field, dict) and logo_field.get("content") else None
+
+    try:
+        pdf_bytes, name_x_ratio, name_y_ratio = pdf_merge.generate_letter_pdf(
+            business_name=business_name,
+            phone=str(fields.get("phone", "")).strip(),
+            email=str(fields.get("email", "")).strip(),
+            accent_hex=str(fields.get("accentColor", "")).strip(),
+            tone=str(fields.get("tone", "")).strip(),
+            angles=angles,
+            contact_method=str(fields.get("contactMethod", "")).strip(),
+            closing_note=str(fields.get("closingNote", "")).strip(),
+            logo_bytes=logo_bytes,
+        )
+    except Exception as e:
+        print(f"Unexpected error generating PDF template: {e}")
+        return 500, {"error": "Couldn't generate the PDF - check the terminal running dashboard.py."}
+
+    os.makedirs(PDF_TEMPLATES_DIR, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.pdf"
+    with open(os.path.join(PDF_TEMPLATES_DIR, filename), "wb") as f:
+        f.write(pdf_bytes)
+
+    template_id = pipeline_db.add_pdf_template(company_name, template_name, filename)
+    pipeline_db.set_pdf_template_field_position(template_id, "owner_name", name_x_ratio, name_y_ratio)
+    return 200, {"id": template_id, "filename": filename}
+
+
 def handle_set_pdf_template_field(payload):
     """Records where on the page (as a ratio, not absolute points) the
     owner/recipient name should be stamped for this PDF template - set via
@@ -1264,6 +1306,9 @@ TEMPLATE = """<!doctype html>
         <h2>PDF Letter Templates</h2>
         <div class="sub">Upload a company&rsquo;s pre-designed letter PDF to send as-is via Lob</div>
       </div>
+      <div class="controls">
+        <button type="button" class="ghost" id="create-pdf-template-btn">Create PDF Template</button>
+      </div>
     </div>
     <form id="pdf-upload-form" style="display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; padding:20px 24px; border-bottom:1px solid var(--border);">
       <div style="flex:1; min-width:160px;">
@@ -1973,6 +2018,9 @@ TEMPLATE = """<!doctype html>
   });
 
   // --- PDF Templates admin panel ---
+  document.getElementById('create-pdf-template-btn').addEventListener('click', () => {
+    window.location.href = '/create-template';
+  });
   const pdfTemplatesBody = document.getElementById('pdf-templates-body');
   const pdfTemplatesEmpty = document.getElementById('pdf-templates-empty');
 
@@ -2812,11 +2860,292 @@ PRIVACY_HTML = f"""<!doctype html>
 </html>
 """
 
+CREATE_TEMPLATE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create PDF Template - Probate Property Leads</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #faf7f1;
+    color: #232c3b;
+  }
+  header.top {
+    background: linear-gradient(135deg, #0a1424, #101d33 55%, #24354f);
+    color: #fff;
+    padding: 22px 32px;
+  }
+  header.top a { color: #ecce8a; font-size: 13.5px; text-decoration: none; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 27px; margin: 0 0 6px; }
+  .sub { color: #707b8d; font-size: 14px; margin-bottom: 30px; }
+  .progress { display: flex; gap: 6px; margin-bottom: 34px; }
+  .progress i { flex: 1; height: 4px; border-radius: 2px; background: #e9e2d2; }
+  .progress i.done { background: #a6822e; }
+  .card { background: #fff; border: 1px solid #e9e2d2; border-radius: 14px; padding: 30px 32px; }
+  .step { display: none; }
+  .step.active { display: block; }
+  .step h2 { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 20px; margin: 0 0 4px; }
+  .step .step-hint { color: #707b8d; font-size: 13.5px; margin-bottom: 22px; }
+  label.field-label { display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #707b8d; margin-bottom: 6px; }
+  .field-input, textarea.field-input {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #e9e2d2; border-radius: 8px;
+    font-size: 14px; font-family: inherit; background: #fdfcfa; color: #232c3b;
+  }
+  .field-input:focus, textarea.field-input:focus { outline: none; border-color: #a6822e; }
+  .field-row { display: flex; gap: 14px; margin-bottom: 18px; }
+  .field-row > div { flex: 1; }
+  .choice-option {
+    display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;
+    border: 1.5px solid #e9e2d2; border-radius: 10px; margin-bottom: 10px; cursor: pointer; background: #fdfcfa;
+  }
+  .choice-option:hover { border-color: #ecce8a; }
+  .choice-option:has(input:checked) { border-color: #a6822e; background: rgba(166,130,46,0.07); box-shadow: 0 0 0 1px #a6822e; }
+  .choice-option input { margin-top: 3px; accent-color: #7c5e1f; }
+  .choice-option .choice-title { font-weight: 600; font-size: 14px; }
+  .choice-option .choice-desc { font-size: 12.5px; color: #707b8d; margin-top: 2px; }
+  .nav-row { display: flex; justify-content: space-between; margin-top: 28px; }
+  button { font-family: inherit; cursor: pointer; border-radius: 999px; padding: 11px 22px; font-size: 13.5px; font-weight: 700; border: 1.5px solid transparent; }
+  button.ghost { background: #fff; border-color: #e9e2d2; color: #232c3b; }
+  button.ghost:hover { border-color: #a6822e; }
+  button.primary { background: #101d33; color: #fff; }
+  button.primary:hover { background: #24354f; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .logo-preview { width: 64px; height: 64px; border-radius: 8px; border: 1.5px solid #e9e2d2; object-fit: contain; display: none; margin-top: 10px; background: #fff; }
+  .result-banner { display: none; margin-top: 18px; padding: 12px 14px; border-radius: 8px; font-size: 13.5px; }
+  .result-banner.show.ok { display: block; background: #eaf6ee; color: #2a6b3d; }
+  .result-banner.show.error { display: block; background: #fbe4e4; color: #a13a3a; }
+  input[type="color"] { width: 52px; height: 40px; padding: 2px; border: 1.5px solid #e9e2d2; border-radius: 8px; background: #fdfcfa; cursor: pointer; }
+</style>
+</head>
+<body>
+<header class="top"><a href="/">&larr; Back to dashboard</a></header>
+<div class="wrap">
+  <h1>Create a PDF Letter Template</h1>
+  <div class="sub">Answer a few questions and we'll design a ready-to-send letter template for you - no design tools needed.</div>
+
+  <div class="progress">
+    <i data-step="0" class="done"></i><i data-step="1"></i><i data-step="2"></i><i data-step="3"></i><i data-step="4"></i>
+  </div>
+
+  <div class="card">
+    <form id="wizard-form">
+      <div class="step active" data-step="0">
+        <h2>Your Branding</h2>
+        <div class="step-hint">This appears in the letterhead at the top of every letter.</div>
+        <div style="margin-bottom:18px;">
+          <label class="field-label" for="w-business-name">Business / Sender Name</label>
+          <input type="text" id="w-business-name" class="field-input" required>
+        </div>
+        <div class="field-row">
+          <div>
+            <label class="field-label" for="w-phone">Phone</label>
+            <input type="text" id="w-phone" class="field-input" placeholder="(555) 123-4567">
+          </div>
+          <div>
+            <label class="field-label" for="w-email">Email</label>
+            <input type="email" id="w-email" class="field-input" placeholder="you@example.com">
+          </div>
+        </div>
+        <div class="field-row">
+          <div>
+            <label class="field-label" for="w-accent-color">Accent Color</label>
+            <input type="color" id="w-accent-color" value="#a6822e">
+          </div>
+          <div>
+            <label class="field-label" for="w-logo">Logo (optional)</label>
+            <input type="file" id="w-logo" accept="image/png,image/jpeg">
+            <img id="w-logo-preview" class="logo-preview" alt="Logo preview">
+          </div>
+        </div>
+      </div>
+
+      <div class="step" data-step="1">
+        <h2>Tone</h2>
+        <div class="step-hint">How should the letter sound?</div>
+        <label class="choice-option">
+          <input type="radio" name="w-tone" value="warm" checked>
+          <div><div class="choice-title">Warm &amp; Compassionate</div><div class="choice-desc">Leads with empathy for the family's loss before getting to business.</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="radio" name="w-tone" value="direct">
+          <div><div class="choice-title">Direct &amp; Professional</div><div class="choice-desc">Gets straight to how you can help, in a businesslike tone.</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="radio" name="w-tone" value="casual">
+          <div><div class="choice-title">Casual &amp; Friendly</div><div class="choice-desc">Reads more like a personal note than a form letter.</div></div>
+        </label>
+      </div>
+
+      <div class="step" data-step="2">
+        <h2>Your Offer</h2>
+        <div class="step-hint">Select whichever apply - these become bullet points in the letter.</div>
+        <label class="choice-option">
+          <input type="checkbox" name="w-angle" value="cash" checked>
+          <div><div class="choice-title">Cash offer</div><div class="choice-desc">No financing delays or contingencies.</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="checkbox" name="w-angle" value="as_is" checked>
+          <div><div class="choice-title">As-is, no repairs needed</div><div class="choice-desc">No cleanout, staging, or repairs required.</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="checkbox" name="w-angle" value="no_fees">
+          <div><div class="choice-title">No agent commissions or fees</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="checkbox" name="w-angle" value="fast_close">
+          <div><div class="choice-title">Fast closing timeline</div></div>
+        </label>
+      </div>
+
+      <div class="step" data-step="3">
+        <h2>Call to Action</h2>
+        <div class="step-hint">How should they get in touch?</div>
+        <label class="choice-option">
+          <input type="radio" name="w-contact" value="phone" checked>
+          <div><div class="choice-title">Phone call</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="radio" name="w-contact" value="text">
+          <div><div class="choice-title">Text message</div></div>
+        </label>
+        <label class="choice-option">
+          <input type="radio" name="w-contact" value="email">
+          <div><div class="choice-title">Email</div></div>
+        </label>
+        <div style="margin-top:18px;">
+          <label class="field-label" for="w-closing-note">Anything else to add? (optional)</label>
+          <textarea id="w-closing-note" class="field-input" rows="3" placeholder="e.g. a personal line about your experience with probate sales"></textarea>
+        </div>
+      </div>
+
+      <div class="step" data-step="4">
+        <h2>Name This Template</h2>
+        <div class="step-hint">So you can tell it apart from other templates later.</div>
+        <div style="margin-bottom:18px;">
+          <label class="field-label" for="w-template-name">Template Name</label>
+          <input type="text" id="w-template-name" class="field-input" placeholder="e.g. Warm Cash Offer" required>
+        </div>
+        <div id="wizard-result" class="result-banner"></div>
+      </div>
+
+      <div class="nav-row">
+        <button type="button" class="ghost" id="w-back" disabled>Back</button>
+        <button type="button" class="primary" id="w-next">Next</button>
+        <button type="button" class="primary" id="w-generate" style="display:none;">Generate Template</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const steps = Array.from(document.querySelectorAll('.step'));
+  const dots = Array.from(document.querySelectorAll('.progress i'));
+  let current = 0;
+
+  function showStep(i) {
+    steps.forEach(s => s.classList.toggle('active', Number(s.dataset.step) === i));
+    dots.forEach(d => d.classList.toggle('done', Number(d.dataset.step) <= i));
+    document.getElementById('w-back').disabled = i === 0;
+    document.getElementById('w-next').style.display = i === steps.length - 1 ? 'none' : 'inline-block';
+    document.getElementById('w-generate').style.display = i === steps.length - 1 ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('w-next').addEventListener('click', () => {
+    if (current === 0 && !document.getElementById('w-business-name').value.trim()) {
+      document.getElementById('w-business-name').focus();
+      return;
+    }
+    current = Math.min(current + 1, steps.length - 1);
+    showStep(current);
+  });
+  document.getElementById('w-back').addEventListener('click', () => {
+    current = Math.max(current - 1, 0);
+    showStep(current);
+  });
+
+  document.getElementById('w-logo').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    const preview = document.getElementById('w-logo-preview');
+    if (!file) { preview.style.display = 'none'; return; }
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+  });
+
+  document.getElementById('w-generate').addEventListener('click', async () => {
+    const templateName = document.getElementById('w-template-name').value.trim();
+    const businessName = document.getElementById('w-business-name').value.trim();
+    const resultEl = document.getElementById('wizard-result');
+    resultEl.classList.remove('show', 'ok', 'error');
+    if (!templateName || !businessName) {
+      current = 0;
+      showStep(current);
+      return;
+    }
+
+    const generateBtn = document.getElementById('w-generate');
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Generating…';
+
+    const formData = new FormData();
+    formData.append('companyName', businessName);
+    formData.append('templateName', templateName);
+    formData.append('businessName', businessName);
+    formData.append('phone', document.getElementById('w-phone').value.trim());
+    formData.append('email', document.getElementById('w-email').value.trim());
+    formData.append('accentColor', document.getElementById('w-accent-color').value);
+    formData.append('tone', document.querySelector('input[name="w-tone"]:checked').value);
+    formData.append('contactMethod', document.querySelector('input[name="w-contact"]:checked').value);
+    formData.append('closingNote', document.getElementById('w-closing-note').value.trim());
+    const selectedAngles = Array.from(document.querySelectorAll('input[name="w-angle"]:checked')).map(cb => cb.value);
+    formData.append('angles', selectedAngles.join(','));
+    const logoFile = document.getElementById('w-logo').files[0];
+    if (logoFile) formData.append('logo', logoFile);
+
+    try {
+      const response = await fetch('/api/generate-pdf-template', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to generate template.');
+      resultEl.classList.add('show', 'ok');
+      resultEl.textContent = 'Template created! Redirecting you back to the dashboard…';
+      setTimeout(() => { window.location.href = '/'; }, 1200);
+    } catch (err) {
+      resultEl.classList.add('show', 'error');
+      resultEl.textContent = err.message;
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'Generate Template';
+    }
+  });
+
+  showStep(0);
+</script>
+</body>
+</html>
+"""
+
 
 class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/terms", "/privacy"):
             body = (TERMS_HTML if self.path == "/terms" else PRIVACY_HTML).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path == "/create-template":
+            if not get_session_email(self):
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.end_headers()
+                return
+            body = CREATE_TEMPLATE_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -2912,6 +3241,16 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 status, response = handle_upload_pdf_template(fields)
             except Exception as e:
                 print(f"Unexpected error uploading PDF template: {e}")
+                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+            self._send_json(status, response)
+            return
+
+        if self.path == "/api/generate-pdf-template":
+            fields = _parse_multipart(self.headers.get("Content-Type", ""), raw_body)
+            try:
+                status, response = handle_generate_pdf_template(fields)
+            except Exception as e:
+                print(f"Unexpected error generating PDF template: {e}")
                 status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
             self._send_json(status, response)
             return
