@@ -9,9 +9,8 @@ from datetime import datetime
 
 import pandas as pd
 import undetected_chromedriver as uc
-from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -32,13 +31,11 @@ CHROME_BINARY_CANDIDATES = [
 # DC.py can write up to 7 files, one per posted date.
 LAST_RUN_PATH = os.path.join(SCRIPT_DIR, ".last_dc_run.json")
 
-# The result-card layout Legacy.com renders for the 2nd result differs from
-# the 1st - confirmed by hand against the live site, not guessable from a
-# single formula.
-RESULT_LINK_XPATHS = {
-    1: "/html/body/div[4]/div[2]/div[2]/div[1]/article/div[1]/div/a/div/div",
-    2: "/html/body/div[4]/div[2]/div[2]/div[2]/div[2]/div/article[1]/div[1]/div/a/div/div",
-}
+# Legacy.com's own search-box and result-card markup is Framer-generated
+# and has changed shape at least twice now (see below) - absolute paths
+# into it keep going stale. The search box has no id/name, but its
+# placeholder text is a stable, user-facing anchor. Confirmed live.
+SEARCH_BOX_SELECTOR = 'input[placeholder="Find a loved one..."]'
 
 
 def get_output_path_for_date(date_str):
@@ -133,32 +130,42 @@ def _search_legacy_attempt(name):
     try:
         driver.get("https://www.legacy.com/")
 
-        # 1. Search bar - type the name and press Enter
+        # 1. Search bar - type the name and click the search button.
+        # Confirmed live that pressing Enter no longer submits anything at
+        # all on the current site (the URL just never changes) - the actual
+        # submit trigger is this button, identified by Framer's own stable
+        # data-framer-name hook rather than a generated class or position.
         def do_search():
             search_box = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH,
-                    "/html/body/div[1]/div[1]/div[3]/div[2]/div[2]/div/div/div[2]/div[2]/div/div/input"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, SEARCH_BOX_SELECTOR))
             )
             search_box.click()
             search_box.send_keys(name)
-            search_box.send_keys(Keys.RETURN)
+            search_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-framer-name="search_button"]'))
+            )
+            search_button.click()
 
         run_with_stale_retry(do_search)
 
-        # 2. Click the top result. If it's not there within the normal 10s
-        # wait, don't reload or restart the browser - stay on this same
-        # results page and try the 2nd result's spot instead.
+        # 2. Click the top result. Confirmed live: every result card is an
+        # <article>, and the first one now links first to a legacy.com
+        # "person" page that only has a truncated preview ("Read the full
+        # obituary on our trusted partner sites below") - the full text is
+        # inline on the direct /us/obituaries/{paper}/name/... link that's
+        # also inside that same first <article>. Falls back to whatever
+        # that article's own first link is (the "person" page) if no such
+        # partner link exists, so the existing multi-strategy text
+        # extraction below still gets a shot at it either way.
         def click_result():
+            first_article = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "article"))
+            )
             try:
-                result_link = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, RESULT_LINK_XPATHS[1]))
-                )
-            except TimeoutException:
-                print(f"Top result not found within 10s for '{name}' - trying the 2nd result on the same page...")
-                result_link = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, RESULT_LINK_XPATHS[2]))
-                )
-            result_link.click()
+                result_link = first_article.find_element(By.CSS_SELECTOR, 'a[href*="/us/obituaries/"]')
+            except NoSuchElementException:
+                result_link = first_article.find_element(By.CSS_SELECTOR, "a")
+            driver.get(result_link.get_attribute("href"))
 
         run_with_stale_retry(click_result)
 
