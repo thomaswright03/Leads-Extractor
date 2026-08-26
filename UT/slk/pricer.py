@@ -16,11 +16,20 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 LAST_RUN_PATH = os.path.join(SCRIPT_DIR, ".last_dc_run.json")
 
-PARCEL_BOX_XPATH = "/html/body/section[3]/div/div/main/section[1]/div[2]/div[1]/form/p[4]/input"
-ADDRESS_BOX_XPATH = "/html/body/section[3]/div/div/main/section[1]/div[2]/div[1]/form/p[2]/input"
-SEARCH_BUTTON_XPATH = "/html/body/section[3]/div/div/main/section[1]/div[2]/div[1]/form/button[1]"
+# These absolute paths into the search form are the same class of bug fixed
+# in SLK$.py: confirmed live that the site was restructured and these all
+# now match zero elements, while the form fields' own ids still exist and
+# are visible - switched to id-based lookups the same way. PROPERTY_VALUE_XPATH
+# is on a different page template that wasn't affected (confirmed live it
+# still resolves to a real value), so it's left as-is.
+PARCEL_BOX_ID = "ParcelSearch"
+ADDRESS_BOX_ID = "AddressSearch"
+SEARCH_BUTTON_ID = "BeginSearch"
 PROPERTY_VALUE_XPATH = "/html/body/section[4]/div/div/main/section/div/div[2]/div[1]/div[2]/div/table/tbody/tr[10]/td[2]"
-AUTOCOMPLETE_XPATH = "/html/body/ul/li/div"
+# The autocomplete dropdown is jQuery UI's own ui-autocomplete widget, not
+# site-specific markup - confirmed live typing a real address into
+# #AddressSearch populates exactly this structure.
+AUTOCOMPLETE_SELECTOR = "ul.ui-autocomplete li.ui-menu-item div"
 
 
 def get_last_run():
@@ -59,13 +68,13 @@ def get_property_value(driver, parcel_id):
     original_window = driver.current_window_handle
 
     parcel_box = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.XPATH, PARCEL_BOX_XPATH))
+        EC.presence_of_element_located((By.ID, PARCEL_BOX_ID))
     )
     parcel_box.clear()
     parcel_box.send_keys(parcel_id)
 
     search_button = WebDriverWait(driver, 15).until(
-        EC.element_to_be_clickable((By.XPATH, SEARCH_BUTTON_XPATH))
+        EC.element_to_be_clickable((By.ID, SEARCH_BUTTON_ID))
     )
     driver.execute_script("arguments[0].scrollIntoView(true);", search_button)
     time.sleep(0.5)
@@ -121,7 +130,7 @@ def fill_city_zip(matches_paths):
     try:
         driver.get("https://www.saltlakecounty.gov/assessor/")
         address_box = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, ADDRESS_BOX_XPATH))
+            EC.presence_of_element_located((By.ID, ADDRESS_BOX_ID))
         )
 
         for matches_path in matches_paths:
@@ -149,7 +158,7 @@ def fill_city_zip(matches_paths):
                 time.sleep(2)
 
                 try:
-                    result_el = driver.find_element(By.XPATH, AUTOCOMPLETE_XPATH)
+                    result_el = driver.find_element(By.CSS_SELECTOR, AUTOCOMPLETE_SELECTOR)
                     city, zip_code = parse_autocomplete_result(result_el.text)
                 except Exception:
                     city, zip_code = None, None
