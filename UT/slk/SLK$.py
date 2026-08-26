@@ -135,8 +135,16 @@ for index, (name, posted_date) in enumerate(names_with_dates):
         search_box_owner.clear()
         search_box_owner.send_keys(last_name)
 
+        # This absolute XPath is the actual, confirmed root cause of every
+        # search failing: verified live against the real site that it now
+        # matches zero elements (a site redesign moved the button), while
+        # the button's own id="BeginSearch" still exists and is visible -
+        # OwnerSearch above already used an id lookup, which is exactly why
+        # that half kept working while this one silently never found the
+        # button and timed out, every single search, regardless of any
+        # Chrome flag.
         search_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, "/html/body/section[3]/div/div/main/section[1]/div[2]/div/form/button[1]"))
+            EC.element_to_be_clickable((By.ID, "BeginSearch"))
         )
         _log("  found search button")
         driver.execute_script("arguments[0].scrollIntoView(true);", search_button)
@@ -219,8 +227,13 @@ for index, (name, posted_date) in enumerate(names_with_dates):
         safe_click(driver, excel_link)
         print("Clicked the 'MS Excel Document' link.")
 
+        # Also confirmed broken live (matches zero elements): clicking the
+        # link above runs showExcel(), a jQuery AJAX call that replaces
+        # #excel's content with a fresh <a href="....xls"><img></a> - a
+        # stable id selector into that div, not another absolute path into
+        # dynamically-inserted content.
         download_img = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "/html/body/section[4]/div/div/main/section/div/div[1]/div[2]/div/a/img"))
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "#excel img"))
         )
         time.sleep(1)
         safe_click(driver, download_img)
