@@ -63,6 +63,7 @@ COUNTY_FOLDER_TO_FIPS = {
     "slk": "49035",  # Salt Lake County, UT
     "uta": "49049",  # Utah County, UT
     "mar": "04013",  # Maricopa County, AZ
+    "apa": "04001",  # Apache County, AZ
 }
 
 # In-memory session store (session_token -> {"email", "expires_at"}). Lives
@@ -406,6 +407,13 @@ COUNTIES = [
         "label": "Maricopa County",
         "state": "AZ",
         "parcel_url_base": "https://mcassessor.maricopa.gov/mcs/?q=",
+    },
+    {
+        "folder": "apa",
+        "path": "../AZ/apa",
+        "label": "Apache County",
+        "state": "AZ",
+        "parcel_url_base": "https://eagleassessor.co.apache.az.us/assessor/taxweb/account.jsp?accountNum=",
     },
 ]
 
