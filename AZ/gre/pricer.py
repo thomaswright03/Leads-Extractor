@@ -55,7 +55,7 @@ def _no_results(driver):
 
 def get_property_value(driver, parcel_id):
     driver.get(INQUIRY_URL)
-    WebDriverWait(driver, 15).until(lambda d: d.find_elements(By.ID, "ctl00_ContentPlaceHolder1_AcctNumberTxt"))
+    WebDriverWait(driver, 30).until(lambda d: d.find_elements(By.ID, "ctl00_ContentPlaceHolder1_AcctNumberTxt"))
     # This site remembers every search field server-side across requests in
     # the same session (confirmed live) - a fresh driver per lookup (below)
     # sidesteps that here, but clearing directly is cheap insurance either
@@ -65,7 +65,7 @@ def get_property_value(driver, parcel_id):
     field.clear()
     field.send_keys(parcel_id)
     driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_SearchBtn").click()
-    WebDriverWait(driver, 15).until(lambda d: _no_results(d) or _is_single_result_page(d))
+    WebDriverWait(driver, 30).until(lambda d: _no_results(d) or _is_single_result_page(d))
 
     if _no_results(driver):
         raise ValueError(f"Account {parcel_id} not found on assessor site.")

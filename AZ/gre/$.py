@@ -91,11 +91,11 @@ def _clear_search_form(driver):
 
 def search_owner(driver, last_name):
     driver.get(INQUIRY_URL)
-    WebDriverWait(driver, 15).until(lambda d: d.find_elements(By.ID, "ctl00_ContentPlaceHolder1_AcctOwnerTxt"))
+    WebDriverWait(driver, 30).until(lambda d: d.find_elements(By.ID, "ctl00_ContentPlaceHolder1_AcctOwnerTxt"))
     _clear_search_form(driver)
     driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_AcctOwnerTxt").send_keys(last_name)
     driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_SearchBtn").click()
-    WebDriverWait(driver, 15).until(
+    WebDriverWait(driver, 30).until(
         lambda d: _no_results(d)
         or _is_single_result_page(d)
         or d.find_elements(By.CSS_SELECTOR, "a[id$='_AccountNoLnkInternal']")
@@ -110,11 +110,11 @@ def search_account_number(driver, account_num):
     # own row links, which are scoped to the session that generated them
     # and go stale as soon as a *different* search runs (confirmed live).
     driver.get(INQUIRY_URL)
-    WebDriverWait(driver, 15).until(lambda d: d.find_elements(By.ID, "ctl00_ContentPlaceHolder1_AcctNumberTxt"))
+    WebDriverWait(driver, 30).until(lambda d: d.find_elements(By.ID, "ctl00_ContentPlaceHolder1_AcctNumberTxt"))
     _clear_search_form(driver)
     driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_AcctNumberTxt").send_keys(account_num)
     driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_SearchBtn").click()
-    WebDriverWait(driver, 15).until(lambda d: _no_results(d) or _is_single_result_page(d))
+    WebDriverWait(driver, 30).until(lambda d: _no_results(d) or _is_single_result_page(d))
 
 
 def parse_account_detail(driver):
@@ -196,7 +196,7 @@ def collect_candidates(driver):
         # working - a JS-dispatched click sidesteps whatever visibility/
         # geometry check Selenium's native click was failing on.
         driver.execute_script("arguments[0].click();", next_links[0])
-        WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 30).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "a[id$='_AccountNoLnkInternal']")
         )
         for account_num, owner_name in parse_result_rows(driver):
