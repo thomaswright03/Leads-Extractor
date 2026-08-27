@@ -144,6 +144,43 @@ def revoke_county_access(email, county):
     ).eq("county", county).execute()
 
 
+def get_manual_county_statuses():
+    """county_fips -> {"status": ..., "customerName"?, "customerEmail"?} for
+    every US county with something manually recorded, for The Map admin
+    page. Most of the time this is just 'building' - a county with a real
+    pipeline folder (see dashboard.py's COUNTY_FOLDER_TO_FIPS) normally
+    doesn't need a row here at all, since 'ready'/'sold' are computed
+    instead from whether it has an owner (get_county_owner). The exception
+    is a sale closed outside the self-serve Stripe flow (see
+    handle_set_county_status): that's recorded here as status='sold' with
+    the customer's info, and dashboard.py's handle_map_status only lets a
+    real Stripe owner override it. 'not_started' is simply the absence of a
+    row."""
+    result = _get_client().table("county_manual_status").select("*").execute()
+    statuses = {}
+    for row in result.data:
+        entry = {"status": row["status"]}
+        if row.get("customer_name"):
+            entry["customerName"] = row["customer_name"]
+        if row.get("customer_email"):
+            entry["customerEmail"] = row["customer_email"]
+        statuses[row["county_fips"]] = entry
+    return statuses
+
+
+def set_manual_county_status(county_fips, status, customer_name=None, customer_email=None):
+    if status == "not_started":
+        _get_client().table("county_manual_status").delete().eq("county_fips", county_fips).execute()
+    else:
+        _get_client().table("county_manual_status").upsert(
+            {
+                "county_fips": county_fips, "status": status,
+                "customer_name": customer_name, "customer_email": customer_email,
+            },
+            on_conflict="county_fips",
+        ).execute()
+
+
 def get_taken_counties():
     """Folder keys of every county that currently has an owner. Under the
     one-agent-per-county model, a county in this set can't be sold to

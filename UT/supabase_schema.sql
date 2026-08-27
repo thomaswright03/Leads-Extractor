@@ -103,3 +103,20 @@ create table if not exists invited_emails (
     invited_at timestamptz not null default now(),
     redeemed_at timestamptz
 );
+
+-- Added 2026-08-26 (The Map, admin-only pipeline-progress page): manually
+-- flags a US county as "being built" before it has a real pipeline folder
+-- (which is what "ready to sell" and normally "sold" are computed from
+-- instead, in dashboard.py's COUNTY_FOLDER_TO_FIPS). A county absent from
+-- this table is "not started". The customer_* columns are only used for a
+-- 'sold' row - recording a sale closed outside the self-serve Stripe
+-- checkout flow (see handle_set_county_status), for a county the map shows
+-- as "ready to sell" (yellow) turning "sold" (green). A real Stripe owner
+-- always takes priority over a manually-recorded sale.
+create table if not exists county_manual_status (
+    county_fips text primary key,
+    status text not null,
+    customer_name text,
+    customer_email text,
+    updated_at timestamptz not null default now()
+);

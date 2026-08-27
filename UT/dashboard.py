@@ -33,6 +33,20 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").sp
 def is_admin(email):
     return bool(email) and email.strip().lower() in ADMIN_EMAILS
 
+# For The Map (see /map, /api/map/*): the only counties with a real,
+# functioning pipeline folder are these three - everything else on the map
+# is either "not started" or manually flagged "building" (see
+# county_manual_status in pipeline_db.py). A folder key's presence here is
+# what turns it into "ready to sell" (yellow) or, once it has an owner,
+# "sold" (green) - add a line here the day a new county's pipeline actually
+# works, not before. County FIPS codes are the standard 5-digit Census ones
+# (first 2 digits = state).
+COUNTY_FOLDER_TO_FIPS = {
+    "slk": "49035",  # Salt Lake County, UT
+    "uta": "49049",  # Utah County, UT
+    "mar": "04013",  # Maricopa County, AZ
+}
+
 # In-memory session store (session_token -> {"email", "expires_at"}). Lives
 # only as long as this process - a restart just means everyone logs in
 # again, which is fine for how this tool is actually used. Real credentials
@@ -269,6 +283,58 @@ def handle_delete_pdf_template(payload):
         os.remove(os.path.join(PDF_TEMPLATES_DIR, template["filename"]))
     except OSError:
         pass
+    return 200, {"ok": True}
+
+
+def handle_map_status():
+    """For The Map: every US county's pipeline-progress status, keyed by
+    5-digit FIPS code. A county missing from this dict is "not started" -
+    the frontend already has every county's shape/name from the public
+    us-atlas topojson it fetches directly, so this only needs to carry the
+    handful of counties that actually have something to report."""
+    statuses = dict(pipeline_db.get_manual_county_statuses())
+    for folder_key, fips in COUNTY_FOLDER_TO_FIPS.items():
+        owner = pipeline_db.get_county_owner(folder_key)
+        if owner:
+            # A real Stripe owner is always authoritative - overwrites a
+            # manual "building" flag that's now stale, or even a manually-
+            # recorded sale for this same county (that customer's own
+            # signup/subscription is the real record once it exists).
+            statuses[fips] = {"status": "sold", "customerEmail": owner}
+        elif statuses.get(fips, {}).get("status") != "sold":
+            # Leave a manually-recorded sale (closed outside Stripe, see
+            # handle_set_county_status) as-is; otherwise this pipeline
+            # folder existing with no owner means "ready to sell".
+            statuses[fips] = {"status": "ready"}
+    return 200, statuses
+
+
+def handle_set_county_status(payload):
+    fips = str(payload.get("fips", "")).strip()
+    status = str(payload.get("status", "")).strip()
+    if not re.fullmatch(r"\d{5}", fips):
+        return 400, {"error": "Invalid county FIPS code."}
+    if status not in ("not_started", "building", "sold"):
+        # 'ready' is always computed from COUNTY_FOLDER_TO_FIPS and county
+        # ownership - never stored, so never settable here.
+        return 400, {"error": "Status must be 'not_started', 'building', or 'sold'."}
+
+    customer_name = str(payload.get("customerName", "")).strip()
+    customer_email = str(payload.get("customerEmail", "")).strip()
+    if status == "sold":
+        # This records a sale closed outside the self-serve signup/Stripe
+        # flow (e.g. the sales rep closed it directly) - it doesn't create
+        # a login or grant real dashboard access, it just puts the
+        # customer's info on file here. A real Stripe subscription for this
+        # county still takes priority if one exists (see handle_map_status).
+        if not customer_email or "@" not in customer_email:
+            return 400, {"error": "A valid customer email is required to mark a county sold."}
+
+    pipeline_db.set_manual_county_status(
+        fips, status,
+        customer_name=customer_name or None,
+        customer_email=customer_email or None,
+    )
     return 200, {"ok": True}
 
 
@@ -1290,6 +1356,7 @@ TEMPLATE = """<!doctype html>
     <div class="generated">
       Generated __GENERATED_AT__
       <span style="margin-left:10px;">__USER_EMAIL__</span>
+      __MAP_LINK__
       <a href="#" id="logout-link" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline; cursor: pointer;">Log Out</a>
     </div>
   </div>
@@ -2528,6 +2595,11 @@ def build_dashboard_html(authenticated=False, email=None):
         .replace("__CONFIRMED_EMPTY_MESSAGE__", confirmed_empty_message)
         .replace("__SERVER_AUTHENTICATED__", "true" if authenticated else "false")
         .replace("__USER_EMAIL__", html.escape(email or ""))
+        .replace(
+            "__MAP_LINK__",
+            '<a href="/map" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline;">The Map</a>'
+            if is_admin(email) else "",
+        )
         .replace("__LEAD_DATA_JSON__", json.dumps(lead_data))
     )
 
@@ -3183,6 +3255,371 @@ CREATE_TEMPLATE_HTML = """<!doctype html>
 """
 
 
+# Admin-only pipeline-progress tracker (not linked anywhere agents can see -
+# gated by is_admin() in do_GET). County shapes and names come straight from
+# the public "us-atlas" topojson (fetched client-side from jsdelivr, same
+# file every d3 US-county-map example uses) - nothing geographic is stored
+# or served by this app itself. Only /api/map/status (which county) counts
+# as "ready"/"sold"/"building", plus the sold ones' customer email) comes
+# from our own backend.
+MAP_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Map - Probate Property Leads</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #faf7f1;
+    color: #232c3b;
+  }
+  header.top {
+    background: linear-gradient(135deg, #0a1424, #101d33 55%, #24354f);
+    color: #fff;
+    padding: 22px 32px;
+  }
+  header.top a { color: #ecce8a; font-size: 13.5px; text-decoration: none; }
+  header.top h1 { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 24px; margin: 8px 0 0; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 80px; }
+  .sub { color: #707b8d; font-size: 13.5px; margin: 0 0 16px; }
+  .map-card { background: #fff; border: 1px solid #e9e2d2; border-radius: 14px; padding: 20px; }
+  button { font-family: inherit; cursor: pointer; border-radius: 999px; padding: 9px 18px; font-size: 13px; font-weight: 700; border: 1.5px solid #e9e2d2; background: #fff; color: #232c3b; }
+  button:hover { border-color: #a6822e; }
+  h2#state-heading { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 21px; margin: 16px 0 4px; }
+  .state-shape { fill: #eef1f5; stroke: #fff; stroke-width: 0.6; cursor: pointer; transition: fill 0.1s; }
+  .state-shape:hover { fill: #dde5f0; }
+  .state-label { font-size: 9.5px; font-weight: 700; fill: #232c3b; text-anchor: middle; pointer-events: none; }
+  .county-shape { stroke: #fff; stroke-width: 0.6; cursor: pointer; }
+  .county-shape:hover { opacity: 0.78; }
+  .county-shape.status-not_started { fill: #eef1f5; }
+  .county-shape.status-building { fill: #d9534f; }
+  .county-shape.status-ready { fill: #e8c04a; }
+  .county-shape.status-sold { fill: #3f9860; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; font-size: 12.5px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); }
+  .panel-overlay {
+    position: fixed; inset: 0; background: rgba(10,20,36,0.45);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+  }
+  .panel-overlay.show { display: flex; }
+  .county-panel {
+    background: #fff; border-radius: 14px; padding: 26px 28px; max-width: 340px;
+    width: 90%; position: relative; box-shadow: 0 20px 50px -12px rgba(0,0,0,0.35);
+  }
+  .county-panel button#county-panel-close {
+    position: absolute; top: 8px; right: 12px; border: none; background: none;
+    font-size: 20px; color: #707b8d; padding: 4px 8px; border-radius: 999px;
+  }
+  .county-panel h3 { margin: 0 0 10px; font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 19px; }
+  .county-panel p { margin: 4px 0; font-size: 13.5px; }
+  .county-panel select, .county-panel input[type="text"], .county-panel input[type="email"] {
+    margin-top: 10px; width: 100%; padding: 9px 10px; border: 1.5px solid #e9e2d2;
+    border-radius: 8px; font-size: 13.5px; font-family: inherit; background: #fdfcfa;
+  }
+  .county-panel select:focus, .county-panel input:focus { outline: none; border-color: #a6822e; }
+  .county-panel label.field-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #707b8d; margin-top: 14px; }
+  #county-panel-mark-sold { margin-top: 14px; }
+  #confirm-sold-btn { background: #101d33; color: #fff; border-color: #101d33; }
+  #confirm-sold-btn:hover { background: #24354f; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a href="/">&larr; Back to Dashboard</a>
+  <h1>The Map</h1>
+</header>
+
+<div class="wrap">
+  <div id="view-national">
+    <p class="sub">Click a state to see its counties. Each state shows (counties with a working script) / (total counties).</p>
+    <div class="map-card" id="national-svg-wrap">Loading map&hellip;</div>
+  </div>
+
+  <div id="view-state" style="display:none;">
+    <button id="back-to-national">&larr; All States</button>
+    <h2 id="state-heading"></h2>
+    <div class="map-card" id="state-svg-wrap"></div>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:#eef1f5;"></span>No work done</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#d9534f;"></span>Being built</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#e8c04a;"></span>Ready to sell</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#3f9860;"></span>Sold</div>
+    </div>
+  </div>
+</div>
+
+<div class="panel-overlay" id="county-panel-overlay">
+  <div class="county-panel">
+    <button id="county-panel-close">&times;</button>
+    <h3 id="county-panel-name"></h3>
+    <p id="county-panel-status"></p>
+    <p id="county-panel-customer" style="display:none;"></p>
+    <div id="county-panel-status-control">
+      <label class="field-label" for="county-status-select">Status</label>
+      <select id="county-status-select">
+        <option value="not_started">Not started</option>
+        <option value="building">Being built</option>
+      </select>
+    </div>
+    <div id="county-panel-mark-sold" style="display:none;">
+      <button type="button" id="mark-sold-btn">Mark as Sold</button>
+      <div id="mark-sold-form" style="display:none;">
+        <label class="field-label" for="sold-customer-name">Customer Name</label>
+        <input type="text" id="sold-customer-name" placeholder="Jane Agent">
+        <label class="field-label" for="sold-customer-email">Customer Email</label>
+        <input type="email" id="sold-customer-email" placeholder="jane@example.com">
+        <button type="button" id="confirm-sold-btn" style="margin-top:12px;">Confirm Sale</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/topojson-client@3"></script>
+<script>
+  const WIDTH = 975, HEIGHT = 610;
+  const STATUS_LABELS = { not_started: 'Not started', building: 'Being built', ready: 'Ready to sell', sold: 'Sold' };
+
+  let statesFeatures = [];
+  let countiesFeatures = [];
+  let statusMap = {};
+  let path;
+
+  const nationalSvgWrap = document.getElementById('national-svg-wrap');
+  const stateSvgWrap = document.getElementById('state-svg-wrap');
+  const viewNational = document.getElementById('view-national');
+  const viewState = document.getElementById('view-state');
+  const stateHeading = document.getElementById('state-heading');
+  const panelOverlay = document.getElementById('county-panel-overlay');
+  const panelName = document.getElementById('county-panel-name');
+  const panelStatusText = document.getElementById('county-panel-status');
+  const panelCustomer = document.getElementById('county-panel-customer');
+  const statusControlWrap = document.getElementById('county-panel-status-control');
+  const statusSelect = document.getElementById('county-status-select');
+  const markSoldWrap = document.getElementById('county-panel-mark-sold');
+  const markSoldBtn = document.getElementById('mark-sold-btn');
+  const markSoldForm = document.getElementById('mark-sold-form');
+  const soldNameInput = document.getElementById('sold-customer-name');
+  const soldEmailInput = document.getElementById('sold-customer-email');
+  const confirmSoldBtn = document.getElementById('confirm-sold-btn');
+  let currentPanelFips = null;
+  let currentPanelName = null;
+
+  function countyStatus(fips) {
+    return (statusMap[fips] && statusMap[fips].status) || 'not_started';
+  }
+
+  function renderNational() {
+    const totalByState = {};
+    const readyOrSoldByState = {};
+    countiesFeatures.forEach((f) => {
+      const stateFips = f.id.slice(0, 2);
+      totalByState[stateFips] = (totalByState[stateFips] || 0) + 1;
+      const st = countyStatus(f.id);
+      if (st === 'ready' || st === 'sold') {
+        readyOrSoldByState[stateFips] = (readyOrSoldByState[stateFips] || 0) + 1;
+      }
+    });
+
+    let svg = `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" style="width:100%; height:auto; display:block;">`;
+    statesFeatures.forEach((f) => {
+      const d = path(f);
+      if (d) svg += `<path class="state-shape" data-fips="${f.id}" d="${d}"></path>`;
+    });
+    statesFeatures.forEach((f) => {
+      const total = totalByState[f.id] || 0;
+      if (!total) return;
+      const ready = readyOrSoldByState[f.id] || 0;
+      const c = path.centroid(f);
+      if (!isFinite(c[0]) || !isFinite(c[1])) return;
+      svg += `<text class="state-label" x="${c[0]}" y="${c[1]}">${ready}/${total}</text>`;
+    });
+    svg += `</svg>`;
+    nationalSvgWrap.innerHTML = svg;
+
+    nationalSvgWrap.querySelectorAll('.state-shape').forEach((el) => {
+      el.addEventListener('click', () => showState(el.getAttribute('data-fips')));
+    });
+  }
+
+  function showState(stateFips) {
+    const feature = statesFeatures.find((f) => f.id === stateFips);
+    if (!feature) return;
+    const stateCounties = countiesFeatures.filter((f) => f.id.slice(0, 2) === stateFips);
+
+    const bounds = path.bounds(feature);
+    const [[x0, y0], [x1, y1]] = bounds;
+    const pad = Math.max(x1 - x0, y1 - y0, 1) * 0.08;
+    const vb = `${x0 - pad} ${y0 - pad} ${(x1 - x0) + pad * 2} ${(y1 - y0) + pad * 2}`;
+
+    let svg = `<svg viewBox="${vb}" style="width:100%; height:auto; display:block;">`;
+    stateCounties.forEach((f) => {
+      const d = path(f);
+      if (!d) return;
+      const st = countyStatus(f.id);
+      const name = (f.properties.name || '').replace(/"/g, '&quot;');
+      svg += `<path class="county-shape status-${st}" data-fips="${f.id}" data-name="${name}" d="${d}"></path>`;
+    });
+    svg += `</svg>`;
+    stateSvgWrap.innerHTML = stateCounties.length
+      ? svg
+      : '<p class="sub" style="margin:0;">No county-level data available for this state.</p>';
+
+    stateSvgWrap.querySelectorAll('.county-shape').forEach((el) => {
+      el.addEventListener('click', () => openCountyPanel(el.getAttribute('data-fips'), el.getAttribute('data-name')));
+    });
+
+    stateHeading.textContent = feature.properties.name;
+    viewNational.style.display = 'none';
+    viewState.style.display = 'block';
+  }
+
+  document.getElementById('back-to-national').addEventListener('click', () => {
+    viewState.style.display = 'none';
+    viewNational.style.display = 'block';
+  });
+
+  function renderPanelStatus(fips, name) {
+    const entry = statusMap[fips];
+    const status = (entry && entry.status) || 'not_started';
+    panelName.textContent = name;
+    panelStatusText.textContent = 'Status: ' + STATUS_LABELS[status];
+
+    if (status === 'sold' && entry && entry.customerEmail) {
+      panelCustomer.textContent = entry.customerName
+        ? `Customer: ${entry.customerName} (${entry.customerEmail})`
+        : 'Customer: ' + entry.customerEmail;
+      panelCustomer.style.display = 'block';
+    } else {
+      panelCustomer.style.display = 'none';
+    }
+
+    markSoldForm.style.display = 'none';
+    soldNameInput.value = '';
+    soldEmailInput.value = '';
+
+    if (status === 'ready') {
+      // The only manual action available for a "ready to sell" county is
+      // recording a sale - it can't go back to "building"/"not started"
+      // once a real script exists for it.
+      statusControlWrap.style.display = 'none';
+      markSoldWrap.style.display = 'block';
+    } else if (status === 'sold') {
+      statusControlWrap.style.display = 'none';
+      markSoldWrap.style.display = 'none';
+    } else {
+      statusControlWrap.style.display = 'block';
+      markSoldWrap.style.display = 'none';
+      statusSelect.value = status;
+    }
+  }
+
+  function openCountyPanel(fips, name) {
+    currentPanelFips = fips;
+    currentPanelName = name;
+    renderPanelStatus(fips, name);
+    panelOverlay.classList.add('show');
+  }
+
+  document.getElementById('county-panel-close').addEventListener('click', () => {
+    panelOverlay.classList.remove('show');
+  });
+  panelOverlay.addEventListener('click', (e) => {
+    if (e.target === panelOverlay) panelOverlay.classList.remove('show');
+  });
+
+  async function saveCountyStatus(fips, status, customerName, customerEmail) {
+    const resp = await fetch('/api/map/set-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fips, status, customerName, customerEmail }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to save status');
+    }
+    if (status === 'not_started') {
+      delete statusMap[fips];
+    } else {
+      const entry = { status };
+      if (customerName) entry.customerName = customerName;
+      if (customerEmail) entry.customerEmail = customerEmail;
+      statusMap[fips] = entry;
+    }
+    const shape = stateSvgWrap.querySelector(`.county-shape[data-fips="${fips}"]`);
+    if (shape) {
+      shape.classList.remove('status-not_started', 'status-building', 'status-ready', 'status-sold');
+      shape.classList.add('status-' + status);
+    }
+  }
+
+  statusSelect.addEventListener('change', async () => {
+    const fips = currentPanelFips;
+    const newStatus = statusSelect.value;
+    try {
+      await saveCountyStatus(fips, newStatus);
+      renderPanelStatus(fips, currentPanelName);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  markSoldBtn.addEventListener('click', () => {
+    markSoldForm.style.display = 'block';
+    soldNameInput.focus();
+  });
+
+  confirmSoldBtn.addEventListener('click', async () => {
+    const fips = currentPanelFips;
+    const customerName = soldNameInput.value.trim();
+    const customerEmail = soldEmailInput.value.trim();
+    if (!customerEmail || !customerEmail.includes('@')) {
+      alert('Enter a valid customer email.');
+      return;
+    }
+    confirmSoldBtn.disabled = true;
+    try {
+      await saveCountyStatus(fips, 'sold', customerName, customerEmail);
+      renderPanelStatus(fips, currentPanelName);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      confirmSoldBtn.disabled = false;
+    }
+  });
+
+  async function init() {
+    const [topoResp, statusResp] = await Promise.all([
+      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json'),
+      fetch('/api/map/status'),
+    ]);
+    const us = await topoResp.json();
+    statusMap = statusResp.ok ? await statusResp.json() : {};
+
+    statesFeatures = topojson.feature(us, us.objects.states).features;
+    countiesFeatures = topojson.feature(us, us.objects.counties).features;
+
+    const projection = d3.geoAlbersUsa().fitSize([WIDTH, HEIGHT], { type: 'FeatureCollection', features: statesFeatures });
+    path = d3.geoPath(projection);
+
+    renderNational();
+  }
+
+  init().catch((err) => {
+    nationalSvgWrap.textContent = 'Failed to load the map: ' + err.message;
+  });
+</script>
+
+</body>
+</html>
+"""
+
+
 class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/terms", "/privacy"):
@@ -3206,6 +3643,28 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if self.path == "/map":
+            if not is_admin(get_session_email(self)):
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.end_headers()
+                return
+            body = MAP_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path == "/api/map/status":
+            if not is_admin(get_session_email(self)):
+                self._send_json(403, {"error": "Admin access required."})
+                return
+            status, response = handle_map_status()
+            self._send_json(status, response)
             return
 
         if self.path.startswith("/pdf-templates/"):
@@ -3316,6 +3775,19 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
 
         if self.path == "/api/create-checkout-session":
             self._handle_create_checkout_session(raw_body)
+            return
+
+        if self.path == "/api/map/set-status":
+            if not is_admin(get_session_email(self)):
+                self._send_json(403, {"error": "Admin access required."})
+                return
+            try:
+                payload = json.loads(raw_body or b"{}")
+            except json.JSONDecodeError:
+                self._send_json(400, {"error": "Invalid JSON body"})
+                return
+            status, response = handle_set_county_status(payload)
+            self._send_json(status, response)
             return
 
         handlers = {
