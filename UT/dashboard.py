@@ -65,6 +65,7 @@ COUNTY_FOLDER_TO_FIPS = {
     "mar": "04013",  # Maricopa County, AZ
     "apa": "04001",  # Apache County, AZ
     "gre": "04011",  # Greenlee County, AZ
+    "gra": "04009",  # Graham County, AZ
 }
 
 # In-memory session store (session_token -> {"email", "expires_at"}). Lives
@@ -448,6 +449,18 @@ COUNTIES = [
         # page (the account number gets tacked on as an ignored, harmless
         # query param) rather than a real deep link to the specific parcel.
         "parcel_url_base": "https://parcelsearch.greenlee.az.gov/Production/RealWareDataMartPropertyInquiryWebsite/Inquiry.aspx?ignored=",
+    },
+    {
+        "folder": "gra",
+        "path": "../AZ/gra",
+        "label": "Graham County",
+        "state": "AZ",
+        # Graham runs the same RealWare DataMart platform as Greenlee, with
+        # the same session-scoped ParcelDetail.aspx?a=<guid> links - no
+        # bookmarkable per-parcel URL, so this lands an admin on the blank
+        # search page (the account number tacked on as an ignored, harmless
+        # query param) rather than a real deep link to the specific parcel.
+        "parcel_url_base": "https://gcwebinfo.graham.az.gov/Production/RealWareDataMartPropertyInquiryWebsite/Inquiry.aspx?ignored=",
     },
 ]
 
