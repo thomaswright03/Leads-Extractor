@@ -5,7 +5,7 @@ name: Nightly lead extraction
 # state came out of the run. Pushing to main is what actually surfaces new
 # leads on the live dashboard - Render auto-redeploys on push, and
 # dashboard.py reads confirmed leads straight from the committed .xlsx files
-# in UT/slk, UT/uta, AZ/mar, AZ/apa, AZ/gre, and AZ/gra (see load_confirmed_leads_from_excel()).
+# in UT/slk, UT/uta, AZ/mar, AZ/apa, AZ/gre, AZ/gra, and AZ/pim (see load_confirmed_leads_from_excel()).
 on:
   schedule:
     # 07:00 UTC = midnight Mountain Daylight Time. Shifts to 1am Mountain
@@ -23,7 +23,7 @@ on:
       county:
         description: "Which county to run"
         type: choice
-        options: [all, slk, uta, mar, apa, gre, gra]
+        options: [all, slk, uta, mar, apa, gre, gra, pim]
         default: all
 
 permissions:
@@ -44,7 +44,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install pandas openpyxl xlrd selenium undetected-chromedriver webdriver-manager
+        run: pip install pandas openpyxl xlrd selenium undetected-chromedriver webdriver-manager requests
 
       - name: Install virtual display (Chrome runs non-headless to avoid bot detection)
         run: sudo apt-get update && sudo apt-get install -y xvfb
@@ -79,10 +79,15 @@ jobs:
         working-directory: AZ/gra
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
+      - name: Run Pima County pipeline
+        if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'pim'
+        working-directory: AZ/pim
+        run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
+
       - name: Commit and push new leads
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add UT/slk UT/uta AZ/mar AZ/apa AZ/gre AZ/gra
+          git add UT/slk UT/uta AZ/mar AZ/apa AZ/gre AZ/gra AZ/pim
           git diff --cached --quiet || git commit -m "Lead extraction $(date -u +%Y-%m-%d) (${{ inputs.mode || 'daily' }}, ${{ inputs.county || 'all' }})"
           git push

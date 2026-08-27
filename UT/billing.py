@@ -117,6 +117,39 @@ def create_checkout_session(email, kind, key, success_url, cancel_url, extra_met
     return session["url"]
 
 
+def update_plan_price(kind, key, monthly_price_cents):
+    """Changes what a plan actually costs, everywhere - Stripe Prices are
+    immutable once created, so "changing" one really means creating a new
+    Price at the new amount and pointing the plan at it; the old Price gets
+    archived (active=false) so it can't be reused, best-effort since a
+    failure there doesn't leave anything actually wrong, just an unused
+    Price object sitting in Stripe. Every checkout going forward reads the
+    plan's stripe_price_id fresh out of Supabase (see create_checkout_session),
+    so this is the one place that needs to change for a new price to take
+    effect at signup, "Add More Access", and anywhere else that quotes it."""
+    plan = pipeline_db.get_pricing_plan(kind, key)
+    if not plan:
+        raise BillingError("No pricing plan exists yet for this county.")
+    if not plan.get("stripe_product_id"):
+        raise BillingError("This county has no Stripe product set up yet - that has to exist before its price can change.")
+
+    old_price_id = plan.get("stripe_price_id")
+    new_price = _stripe_request("POST", "prices", {
+        "product": plan["stripe_product_id"],
+        "unit_amount": monthly_price_cents,
+        "currency": "usd",
+        "recurring[interval]": "month",
+    })
+    pipeline_db.set_pricing_plan_stripe_ids(kind, key, plan["stripe_product_id"], new_price["id"])
+    pipeline_db.update_pricing_plan_price(kind, key, monthly_price_cents)
+
+    if old_price_id:
+        try:
+            _stripe_request("POST", f"prices/{old_price_id}", {"active": "false"})
+        except BillingError as e:
+            print(f"WARNING: failed to archive old Stripe price {old_price_id} after replacing it: {e}")
+
+
 # Lob's base rate for the letter type this platform sends (standard,
 # black & white, single page, First Class) is $0.658/letter - charged per
 # letter with a 10% markup, on top of the flat monthly county subscription.

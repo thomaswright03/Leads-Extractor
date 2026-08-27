@@ -294,6 +294,15 @@ def set_pricing_plan_stripe_ids(kind, key, stripe_product_id, stripe_price_id):
     ).eq("kind", kind).eq("key", key).execute()
 
 
+def update_pricing_plan_price(kind, key, monthly_price_cents):
+    """Just the Supabase side of a price change - see billing.update_plan_price
+    for the paired Stripe Price swap that has to happen alongside this so
+    Stripe Checkout actually charges the new amount."""
+    _get_client().table("pricing_plans").update(
+        {"monthly_price_cents": monthly_price_cents}
+    ).eq("kind", kind).eq("key", key).execute()
+
+
 def record_subscription(email, kind, key, stripe_customer_id, stripe_subscription_id, status):
     _get_client().table("subscriptions").upsert({
         "email": email.strip().lower(),
