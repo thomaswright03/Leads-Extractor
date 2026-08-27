@@ -219,18 +219,42 @@ if __name__ == "__main__":
     # here - simpler than reusing one session across every search, and a
     # crashed/stuck browser only costs one name instead of the whole run.
     for name, posted_date in names_with_dates:
-        driver = create_driver()
+        last_name = extract_last_name(name)
+        first_name = extract_first_name(name)
+        if not last_name or not first_name:
+            print(f"Skipping '{name}' - couldn't parse a first/last name.")
+            continue
+
+        print(f"Searching for last name: {last_name}")
+
+        # The very first live CI run of this county hit a reproducible
+        # timeout on the *second* name searched in a run, every time, on a
+        # perfectly ordinary name that loads fine and fast locally -
+        # pointing at back-to-back Chrome launches being flaky in that
+        # constrained environment rather than anything wrong with the
+        # query itself. One retry with a brand-new browser (not just a
+        # retried action in the same one) is what actually addresses that.
+        driver = None
+        candidates = None
+        search_error = None
+        for attempt in range(2):
+            driver = create_driver()
+            try:
+                search_owner(driver, last_name)
+                candidates = collect_candidates(driver)
+                break
+            except Exception as e:
+                search_error = e
+                driver.quit()
+                driver = None
+                if attempt == 0:
+                    print(f"  First attempt failed ({e}) - retrying '{name}' with a fresh browser.")
+
+        if candidates is None:
+            print(f"Error during search for '{name}': {search_error}")
+            continue
+
         try:
-            last_name = extract_last_name(name)
-            first_name = extract_first_name(name)
-            if not last_name or not first_name:
-                print(f"Skipping '{name}' - couldn't parse a first/last name.")
-                continue
-
-            print(f"Searching for last name: {last_name}")
-            search_owner(driver, last_name)
-            candidates = collect_candidates(driver)
-
             if not candidates:
                 print(f"No results found for {name}. Moving on.")
                 continue
@@ -266,7 +290,7 @@ if __name__ == "__main__":
                 )
 
         except Exception as e:
-            print(f"Error during search for '{name}': {e}")
+            print(f"Error processing candidates for '{name}': {e}")
         finally:
             driver.quit()
 
