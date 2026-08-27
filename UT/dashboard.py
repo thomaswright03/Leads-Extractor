@@ -316,15 +316,20 @@ def _compute_all_county_statuses():
     for folder_key, fips in COUNTY_FOLDER_TO_FIPS.items():
         owner = pipeline_db.get_county_owner(folder_key)
         if owner:
-            # A real Stripe owner is always authoritative - overwrites a
-            # manual "building" flag that's now stale, or even a manually-
-            # recorded sale for this same county (that customer's own
-            # signup/subscription is the real record once it exists).
-            statuses[fips] = {"status": "sold", "customerEmail": owner}
-        elif statuses.get(fips, {}).get("status") != "sold":
-            # Leave a manually-recorded sale (closed outside Stripe, see
-            # handle_set_county_status) as-is; otherwise this pipeline
-            # folder existing with no owner means "ready to sell".
+            # A real Stripe owner is always authoritative - overwrites any
+            # manual override for this same county ("building", "ready", or
+            # a manually-recorded sale), since that customer's own real
+            # signup/subscription is the actual record once it exists. The
+            # "real" flag tells the map not to offer any manual override on
+            # top of it - there's nothing to override.
+            statuses[fips] = {"status": "sold", "customerEmail": owner, "real": True}
+        elif fips not in statuses:
+            # No manual override recorded at all - the default computed
+            # state for a county with a real pipeline script and no real
+            # owner is "ready to sell". A manual "building" or manually-
+            # recorded "sold" override (see handle_set_county_status) is
+            # left exactly as stored - deleting it (status "ready") is what
+            # falls back to this computed default.
             statuses[fips] = {"status": "ready"}
     return statuses
 
@@ -346,15 +351,26 @@ def handle_set_county_status(payload, restrict_to_marking_sold=False):
     if not re.fullmatch(r"\d{5}", fips):
         return 400, {"error": "Invalid county FIPS code."}
 
+    has_real_script = fips in COUNTY_FOLDER_TO_FIPS.values()
+
     if restrict_to_marking_sold:
         if status != "sold":
             return 403, {"error": "This account can only mark a county as sold."}
         if _compute_all_county_statuses().get(fips, {}).get("status") != "ready":
             return 400, {"error": "That county isn't ready to sell yet."}
-    elif status not in ("not_started", "building", "sold"):
-        # 'ready' is always computed from COUNTY_FOLDER_TO_FIPS and county
-        # ownership - never stored, so never settable here.
-        return 400, {"error": "Status must be 'not_started', 'building', or 'sold'."}
+    else:
+        # A county with a real pipeline script can move freely between
+        # being built, ready to sell, and (manually) sold, in either
+        # direction - "not started" doesn't apply once a real script
+        # exists. A county with no script yet can only be flagged as being
+        # worked on or reset - there's nothing to sell.
+        valid_statuses = {"building", "ready", "sold"} if has_real_script else {"not_started", "building"}
+        if status not in valid_statuses:
+            return 400, {"error": f"Status must be one of: {', '.join(sorted(valid_statuses))}."}
+
+        current = _compute_all_county_statuses().get(fips, {})
+        if current.get("real"):
+            return 400, {"error": "This county has a real paying subscriber - status can't be changed here."}
 
     customer_name = str(payload.get("customerName", "")).strip()
     customer_email = str(payload.get("customerEmail", "")).strip()
@@ -369,8 +385,12 @@ def handle_set_county_status(payload, restrict_to_marking_sold=False):
         if not customer_email or "@" not in customer_email:
             return 400, {"error": "A valid customer email is required to mark a county sold."}
 
+    # "ready" is never stored - it's just the absence of a manual override
+    # for a county with a real script (see _compute_all_county_statuses),
+    # so reverting to it is a delete, same mechanism "not_started" already
+    # uses for a county with no script yet.
     pipeline_db.set_manual_county_status(
-        fips, status,
+        fips, "not_started" if status == "ready" else status,
         customer_name=customer_name or None,
         customer_email=customer_email or None,
         customer_phone=customer_phone or None,
@@ -524,6 +544,14 @@ def load_confirmed_leads_from_excel(county):
                 "sourceFile": os.path.basename(path),
                 "county": county["label"],
                 "countyFolder": county["folder"],
+                # The county's own state (e.g. "AZ") - distinct from "state"
+                # above, which is this specific lead's mailing address state
+                # and isn't reliably the same thing (a county's exclusivity
+                # and a lead's mailing address are unrelated). Lets the
+                # dashboard filter by state first, since multiple states
+                # each have their own same-named county (e.g. Washington
+                # County exists in several states).
+                "countyState": county["state"],
             }
     return list(leads_by_key.values())
 
@@ -1489,6 +1517,7 @@ TEMPLATE = """<!doctype html>
       </div>
       <div class="controls">
         <div class="search-box"><input id="search-confirmed" type="text" placeholder="Search name, owner, parcel&hellip;"></div>
+        <select id="state-filter" class="ghost"><option value="">All States</option></select>
         <select id="county-filter" class="ghost"><option value="">All Counties</option></select>
         <button class="ghost" id="bulk-send-open">Send This Week&rsquo;s Letters</button>
         <button class="ghost" id="export-confirmed">Export CSV</button>
@@ -2067,10 +2096,11 @@ TEMPLATE = """<!doctype html>
     }
   }
 
-  const confirmedState = { query: '', countyFolder: '', sortKey: 'dateAdded', sortDir: 'desc' };
+  const confirmedState = { query: '', stateFilter: '', countyFolder: '', sortKey: 'dateAdded', sortDir: 'desc' };
 
   function applyState(list, state) {
-    let result = state.countyFolder ? list.filter(l => l.countyFolder === state.countyFolder) : list.slice();
+    let result = state.stateFilter ? list.filter(l => l.countyState === state.stateFilter) : list.slice();
+    if (state.countyFolder) result = result.filter(l => l.countyFolder === state.countyFolder);
     if (state.query) result = result.filter(l => matches(l, state.query));
     if (state.sortKey) {
       result.sort((a, b) => {
@@ -2122,12 +2152,45 @@ TEMPLATE = """<!doctype html>
     repaintConfirmed();
   });
 
+  const stateFilterSelect = document.getElementById('state-filter');
   const countyFilterSelect = document.getElementById('county-filter');
-  (leadData.counties || []).forEach(c => {
+  const allCounties = leadData.counties || [];
+
+  // Sorted, de-duplicated list of states that actually have a county -
+  // built from the counties themselves rather than hand-maintained, so a
+  // newly added county's state just shows up here automatically.
+  Array.from(new Set(allCounties.map(c => c.state))).sort().forEach(state => {
     const opt = document.createElement('option');
-    opt.value = c.folder;
-    opt.textContent = c.label;
-    countyFilterSelect.appendChild(opt);
+    opt.value = state;
+    opt.textContent = state;
+    stateFilterSelect.appendChild(opt);
+  });
+
+  function repopulateCountyFilter(selectedState) {
+    countyFilterSelect.innerHTML = '<option value="">All Counties</option>';
+    allCounties
+      .filter(c => !selectedState || c.state === selectedState)
+      // Same-named counties exist across different states (e.g. many
+      // states have their own "Washington County") - spelling out the
+      // state here (not just when a state's already picked) is what
+      // actually disambiguates them in this dropdown.
+      .forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.folder;
+        opt.textContent = `${c.label} (${c.state})`;
+        countyFilterSelect.appendChild(opt);
+      });
+  }
+  repopulateCountyFilter('');
+
+  stateFilterSelect.addEventListener('change', e => {
+    confirmedState.stateFilter = e.target.value;
+    // Switching state invalidates whatever county was picked before (it
+    // may not even belong to the newly selected state) - reset to "All
+    // Counties" within the new state rather than leaving a stale filter.
+    confirmedState.countyFolder = '';
+    repopulateCountyFilter(confirmedState.stateFilter);
+    repaintConfirmed();
   });
   countyFilterSelect.addEventListener('change', e => {
     confirmedState.countyFolder = e.target.value;
@@ -2623,7 +2686,7 @@ def build_dashboard_html(authenticated=False, email=None):
         if p["kind"] == "county"
     ]
 
-    counties = [{"folder": c["folder"], "label": c["label"]} for c in visible_counties]
+    counties = [{"folder": c["folder"], "label": c["label"], "state": c["state"]} for c in visible_counties]
     lead_data = {
         "confirmed": confirmed_leads,
         "templates": LETTER_TEMPLATES,
@@ -3394,7 +3457,7 @@ MAP_HTML = """<!doctype html>
   .county-panel textarea { resize: vertical; }
   .county-panel select:focus, .county-panel input:focus, .county-panel textarea:focus { outline: none; border-color: #a6822e; }
   .county-panel label.field-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #707b8d; margin-top: 14px; }
-  #county-panel-mark-sold { margin-top: 14px; }
+  #county-panel-mark-sold, #county-panel-revert-ready { margin-top: 14px; }
   #confirm-sold-btn { background: #101d33; color: #fff; border-color: #101d33; }
   #confirm-sold-btn:hover { background: #24354f; }
 </style>
@@ -3437,10 +3500,7 @@ MAP_HTML = """<!doctype html>
     <p id="county-panel-customer" style="display:none;"></p>
     <div id="county-panel-status-control">
       <label class="field-label" for="county-status-select">Status</label>
-      <select id="county-status-select">
-        <option value="not_started">Not started</option>
-        <option value="building">Being built</option>
-      </select>
+      <select id="county-status-select"></select>
     </div>
     <div id="county-panel-mark-sold" style="display:none;">
       <button type="button" id="mark-sold-btn">Mark as Sold</button>
@@ -3455,6 +3515,9 @@ MAP_HTML = """<!doctype html>
         <textarea id="sold-notes" rows="3" placeholder="Anything worth remembering about this sale"></textarea>
         <button type="button" id="confirm-sold-btn" style="margin-top:12px;">Confirm Sale</button>
       </div>
+    </div>
+    <div id="county-panel-revert-ready" style="display:none;">
+      <button type="button" id="revert-ready-btn">Revert to Ready to Sell</button>
     </div>
   </div>
 </div>
@@ -3475,6 +3538,13 @@ MAP_HTML = """<!doctype html>
     '04003', '04005', '04013', '04015', '04017', '04019', '04021', '04025', '04027', // AZ: Cochise, Coconino, Maricopa, Mohave, Navajo, Pima, Pinal, Yavapai, Yuma
     '49005', '49011', '49035', '49045', '49049', '49053', '49057', // UT: Cache, Davis, Salt Lake, Tooele, Utah, Washington, Weber
   ]);
+
+  // FIPS codes with a real, working pipeline script (dashboard.py's
+  // COUNTY_FOLDER_TO_FIPS) - these can be toggled between "building",
+  // "ready", and "sold" (a real script exists, so "not started" doesn't
+  // apply). Every other county on the map can only be "not started" or
+  // "building" (no script exists yet to sell).
+  const REAL_SCRIPT_FIPS = new Set(__REAL_SCRIPT_FIPS_JSON__);
 
   function escapeXml(str) {
     return String(str || '').replace(/[&<>"']/g, (c) => ({
@@ -3506,6 +3576,8 @@ MAP_HTML = """<!doctype html>
   const soldPhoneInput = document.getElementById('sold-customer-phone');
   const soldNotesInput = document.getElementById('sold-notes');
   const confirmSoldBtn = document.getElementById('confirm-sold-btn');
+  const revertReadyWrap = document.getElementById('county-panel-revert-ready');
+  const revertReadyBtn = document.getElementById('revert-ready-btn');
   let currentPanelFips = null;
   let currentPanelName = null;
 
@@ -3584,9 +3656,21 @@ MAP_HTML = """<!doctype html>
     viewNational.style.display = 'block';
   });
 
+  function populateStatusSelect(values, current) {
+    statusSelect.innerHTML = '';
+    values.forEach((value) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = STATUS_LABELS[value];
+      statusSelect.appendChild(opt);
+    });
+    statusSelect.value = current;
+  }
+
   function renderPanelStatus(fips, name) {
     const entry = statusMap[fips];
     const status = (entry && entry.status) || 'not_started';
+    const hasRealScript = REAL_SCRIPT_FIPS.has(fips);
     panelName.textContent = name;
     panelStatusText.textContent = 'Status: ' + STATUS_LABELS[status];
 
@@ -3607,24 +3691,44 @@ MAP_HTML = """<!doctype html>
     soldEmailInput.value = '';
     soldPhoneInput.value = '';
     soldNotesInput.value = '';
+    statusControlWrap.style.display = 'none';
+    markSoldWrap.style.display = 'none';
+    revertReadyWrap.style.display = 'none';
 
-    if (status === 'ready') {
-      // The only manual action available for a "ready to sell" county is
-      // recording a sale - it can't go back to "building"/"not started"
-      // once a real script exists for it.
-      statusControlWrap.style.display = 'none';
-      markSoldWrap.style.display = 'block';
-    } else if (status === 'sold' || IS_MAP_EDITOR_ONLY) {
-      // A map-only account (see is_map_only in dashboard.py) can never
-      // touch "building"/"not started" - the server would reject it anyway,
-      // so don't even show a control that can't work.
-      statusControlWrap.style.display = 'none';
-      markSoldWrap.style.display = 'none';
-    } else {
-      statusControlWrap.style.display = 'block';
-      markSoldWrap.style.display = 'none';
-      statusSelect.value = status;
+    // A real Stripe subscriber (see is_map_only/"real" in dashboard.py) is
+    // never editable here regardless of account type - there's nothing to
+    // override, that customer's own subscription is the real record.
+    if (status === 'sold' && entry && entry.real) return;
+
+    if (status === 'sold') {
+      // A sale recorded manually (not a real subscriber) can only be
+      // reverted back to "ready to sell" from here - a map-only account
+      // never gets this control, only a full admin can undo a sale.
+      if (!IS_MAP_EDITOR_ONLY) revertReadyWrap.style.display = 'block';
+      return;
     }
+
+    if (!hasRealScript) {
+      // No real script yet - "ready"/"sold" don't apply, and a map-only
+      // account has no business here at all (nothing for it to mark sold).
+      if (!IS_MAP_EDITOR_ONLY) {
+        statusControlWrap.style.display = 'block';
+        populateStatusSelect(['not_started', 'building'], status);
+      }
+      return;
+    }
+
+    // A real script exists (status is "building" or "ready"): a map-only
+    // account can only mark a *ready* county sold - never toggle
+    // building/ready - everyone else can freely move between the two, in
+    // either direction, plus mark it sold from either state.
+    if (IS_MAP_EDITOR_ONLY) {
+      markSoldWrap.style.display = status === 'ready' ? 'block' : 'none';
+      return;
+    }
+    statusControlWrap.style.display = 'block';
+    populateStatusSelect(['building', 'ready'], status);
+    markSoldWrap.style.display = 'block';
   }
 
   function openCountyPanel(fips, name) {
@@ -3705,6 +3809,19 @@ MAP_HTML = """<!doctype html>
     }
   });
 
+  revertReadyBtn.addEventListener('click', async () => {
+    const fips = currentPanelFips;
+    revertReadyBtn.disabled = true;
+    try {
+      await saveCountyStatus(fips, 'ready');
+      renderPanelStatus(fips, currentPanelName);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      revertReadyBtn.disabled = false;
+    }
+  });
+
   async function init() {
     const [topoResp, statusResp] = await Promise.all([
       fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json'),
@@ -3775,7 +3892,11 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("Location", "/")
                 self.end_headers()
                 return
-            page = MAP_HTML.replace("__IS_MAP_EDITOR_ONLY__", "true" if is_map_only(email) else "false")
+            page = (
+                MAP_HTML
+                .replace("__IS_MAP_EDITOR_ONLY__", "true" if is_map_only(email) else "false")
+                .replace("__REAL_SCRIPT_FIPS_JSON__", json.dumps(list(COUNTY_FOLDER_TO_FIPS.values())))
+            )
             body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
