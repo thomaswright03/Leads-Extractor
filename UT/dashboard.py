@@ -64,6 +64,7 @@ COUNTY_FOLDER_TO_FIPS = {
     "uta": "49049",  # Utah County, UT
     "mar": "04013",  # Maricopa County, AZ
     "apa": "04001",  # Apache County, AZ
+    "gre": "04011",  # Greenlee County, AZ
 }
 
 # In-memory session store (session_token -> {"email", "expires_at"}). Lives
@@ -414,6 +415,19 @@ COUNTIES = [
         "label": "Apache County",
         "state": "AZ",
         "parcel_url_base": "https://eagleassessor.co.apache.az.us/assessor/taxweb/account.jsp?accountNum=",
+    },
+    {
+        "folder": "gre",
+        "path": "../AZ/gre",
+        "label": "Greenlee County",
+        "state": "AZ",
+        # Greenlee's parcel search site has no bookmarkable per-parcel URL
+        # (its ParcelDetail.aspx?a=<guid> links are scoped to the search
+        # session that generated them, not stable across sessions -
+        # confirmed live) - this just lands an admin on the blank search
+        # page (the account number gets tacked on as an ignored, harmless
+        # query param) rather than a real deep link to the specific parcel.
+        "parcel_url_base": "https://parcelsearch.greenlee.az.gov/Production/RealWareDataMartPropertyInquiryWebsite/Inquiry.aspx?ignored=",
     },
 ]
 
