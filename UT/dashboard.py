@@ -2537,6 +2537,8 @@ TEMPLATE = """<!doctype html>
   });
 </script>
 
+<footer style="text-align:center; padding:24px 20px; font-size:11.5px; color:#707b8d;">&copy; 2026 Wright AI Solutions, LLC. All rights reserved.</footer>
+
 </body>
 </html>
 """
@@ -2948,6 +2950,7 @@ TERMS_HTML = f"""<!doctype html>
   <p>Questions about these Terms can be sent to
   <a href="mailto:{LEGAL_CONTACT_EMAIL}">{LEGAL_CONTACT_EMAIL}</a>.</p>
 </div>
+<footer style="text-align:center; padding:24px 20px; font-size:11.5px; color:#707b8d;">&copy; 2026 Wright AI Solutions, LLC. All rights reserved.</footer>
 </body>
 </html>
 """
@@ -3030,6 +3033,7 @@ PRIVACY_HTML = f"""<!doctype html>
   <p>Questions about this policy can be sent to
   <a href="mailto:{LEGAL_CONTACT_EMAIL}">{LEGAL_CONTACT_EMAIL}</a>.</p>
 </div>
+<footer style="text-align:center; padding:24px 20px; font-size:11.5px; color:#707b8d;">&copy; 2026 Wright AI Solutions, LLC. All rights reserved.</footer>
 </body>
 </html>
 """
@@ -3297,6 +3301,7 @@ CREATE_TEMPLATE_HTML = """<!doctype html>
 
   showStep(0);
 </script>
+<footer style="text-align:center; padding:24px 20px; font-size:11.5px; color:#707b8d;">&copy; 2026 Wright AI Solutions, LLC. All rights reserved.</footer>
 </body>
 </html>
 """
@@ -3707,6 +3712,8 @@ MAP_HTML = """<!doctype html>
     nationalSvgWrap.textContent = 'Failed to load the map: ' + err.message;
   });
 </script>
+
+<footer style="text-align:center; padding:24px 20px; font-size:11.5px; color:#707b8d;">&copy; 2026 Wright AI Solutions, LLC. All rights reserved.</footer>
 
 </body>
 </html>
