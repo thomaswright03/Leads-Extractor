@@ -196,9 +196,23 @@ def collect_candidates(driver):
         # working - a JS-dispatched click sidesteps whatever visibility/
         # geometry check Selenium's native click was failing on.
         driver.execute_script("arguments[0].click();", next_links[0])
+        # A "next page" with exactly one row left doesn't render as a
+        # one-row list - it auto-redirects straight to that record's own
+        # detail page, the same single-result shape a fresh search can
+        # land on (confirmed live: reproduced 100% of the time on a real
+        # search where the last page held exactly one match - explains a
+        # run that otherwise looked like an unrelated environment timeout,
+        # since waiting for list-only markup here never resolved). Both
+        # possible next shapes have to be in the wait, not just the list.
         WebDriverWait(driver, 30).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "a[id$='_AccountNoLnkInternal']")
+            or _is_single_result_page(d)
         )
+        if _is_single_result_page(driver):
+            account_num, owner_name, *_ = parse_account_detail(driver)
+            if account_num.startswith("R"):
+                seen_accounts[account_num] = owner_name
+            break
         for account_num, owner_name in parse_result_rows(driver):
             seen_accounts[account_num] = owner_name
 
@@ -219,42 +233,18 @@ if __name__ == "__main__":
     # here - simpler than reusing one session across every search, and a
     # crashed/stuck browser only costs one name instead of the whole run.
     for name, posted_date in names_with_dates:
-        last_name = extract_last_name(name)
-        first_name = extract_first_name(name)
-        if not last_name or not first_name:
-            print(f"Skipping '{name}' - couldn't parse a first/last name.")
-            continue
-
-        print(f"Searching for last name: {last_name}")
-
-        # The very first live CI run of this county hit a reproducible
-        # timeout on the *second* name searched in a run, every time, on a
-        # perfectly ordinary name that loads fine and fast locally -
-        # pointing at back-to-back Chrome launches being flaky in that
-        # constrained environment rather than anything wrong with the
-        # query itself. One retry with a brand-new browser (not just a
-        # retried action in the same one) is what actually addresses that.
-        driver = None
-        candidates = None
-        search_error = None
-        for attempt in range(2):
-            driver = create_driver()
-            try:
-                search_owner(driver, last_name)
-                candidates = collect_candidates(driver)
-                break
-            except Exception as e:
-                search_error = e
-                driver.quit()
-                driver = None
-                if attempt == 0:
-                    print(f"  First attempt failed ({e}) - retrying '{name}' with a fresh browser.")
-
-        if candidates is None:
-            print(f"Error during search for '{name}': {search_error}")
-            continue
-
+        driver = create_driver()
         try:
+            last_name = extract_last_name(name)
+            first_name = extract_first_name(name)
+            if not last_name or not first_name:
+                print(f"Skipping '{name}' - couldn't parse a first/last name.")
+                continue
+
+            print(f"Searching for last name: {last_name}")
+            search_owner(driver, last_name)
+            candidates = collect_candidates(driver)
+
             if not candidates:
                 print(f"No results found for {name}. Moving on.")
                 continue
@@ -290,7 +280,7 @@ if __name__ == "__main__":
                 )
 
         except Exception as e:
-            print(f"Error processing candidates for '{name}': {e}")
+            print(f"Error during search for '{name}': {e}")
         finally:
             driver.quit()
 
