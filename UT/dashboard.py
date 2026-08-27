@@ -3337,9 +3337,13 @@ MAP_HTML = """<!doctype html>
   .county-shape.status-building { fill: #d9534f; }
   .county-shape.status-ready { fill: #e8c04a; }
   .county-shape.status-sold { fill: #3f9860; }
-  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; font-size: 12.5px; }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
-  .legend-swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); }
+  .county-shape.high-pop { stroke: #ecce8a; stroke-width: 2.2; }
+  .state-view-body { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  .state-view-body .map-card { flex: 1 1 480px; min-width: 0; }
+  .legend { flex: 0 0 180px; display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; padding-top: 4px; }
+  .legend-title { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #707b8d; margin-bottom: 2px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); flex-shrink: 0; }
   .panel-overlay {
     position: fixed; inset: 0; background: rgba(10,20,36,0.45);
     display: none; align-items: center; justify-content: center; z-index: 50;
@@ -3384,12 +3388,16 @@ MAP_HTML = """<!doctype html>
   <div id="view-state" style="display:none;">
     <button id="back-to-national">&larr; All States</button>
     <h2 id="state-heading"></h2>
-    <div class="map-card" id="state-svg-wrap"></div>
-    <div class="legend">
-      <div class="legend-item"><span class="legend-swatch" style="background:#eef1f5;"></span>No work done</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#d9534f;"></span>Being built</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#e8c04a;"></span>Ready to sell</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#3f9860;"></span>Sold</div>
+    <div class="state-view-body">
+      <div class="map-card" id="state-svg-wrap"></div>
+      <div class="legend">
+        <div class="legend-title">Legend</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#1c2333;"></span>No work done</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#d9534f;"></span>Being built</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#e8c04a;"></span>Ready to sell</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#3f9860;"></span>Sold</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#1c2333; border: 2.5px solid #ecce8a;"></span>75,000+ population</div>
+      </div>
     </div>
   </div>
 </div>
@@ -3430,6 +3438,16 @@ MAP_HTML = """<!doctype html>
   const IS_MAP_EDITOR_ONLY = __IS_MAP_EDITOR_ONLY__;
   const WIDTH = 975, HEIGHT = 610;
   const STATUS_LABELS = { not_started: 'Not started', building: 'Being built', ready: 'Ready to sell', sold: 'Sold' };
+
+  // AZ and UT counties with 75,000+ population (2025 Census estimates,
+  // en.wikipedia.org/wiki/List_of_counties_in_{Arizona,Utah}) - outlined
+  // bold on the map regardless of pipeline status. Static reference data,
+  // not worth a backend round-trip for - update by hand if it's ever worth
+  // extending past these two states or refreshing the figures.
+  const HIGH_POP_COUNTY_FIPS = new Set([
+    '04003', '04005', '04013', '04015', '04017', '04019', '04021', '04025', '04027', // AZ: Cochise, Coconino, Maricopa, Mohave, Navajo, Pima, Pinal, Yavapai, Yuma
+    '49005', '49011', '49035', '49045', '49049', '49053', '49057', // UT: Cache, Davis, Salt Lake, Tooele, Utah, Washington, Weber
+  ]);
 
   function escapeXml(str) {
     return String(str || '').replace(/[&<>"']/g, (c) => ({
@@ -3517,7 +3535,8 @@ MAP_HTML = """<!doctype html>
       if (!d) return;
       const st = countyStatus(f.id);
       const rawName = f.properties.name || '';
-      svg += `<path class="county-shape status-${st}" data-fips="${f.id}" data-name="${escapeXml(rawName)}" d="${d}"><title>${escapeXml(rawName)}</title></path>`;
+      const highPopClass = HIGH_POP_COUNTY_FIPS.has(f.id) ? ' high-pop' : '';
+      svg += `<path class="county-shape status-${st}${highPopClass}" data-fips="${f.id}" data-name="${escapeXml(rawName)}" d="${d}"><title>${escapeXml(rawName)}</title></path>`;
     });
     svg += `</svg>`;
     stateSvgWrap.innerHTML = stateCounties.length
