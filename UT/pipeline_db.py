@@ -164,11 +164,17 @@ def get_manual_county_statuses():
             entry["customerName"] = row["customer_name"]
         if row.get("customer_email"):
             entry["customerEmail"] = row["customer_email"]
+        if row.get("customer_phone"):
+            entry["customerPhone"] = row["customer_phone"]
+        if row.get("notes"):
+            entry["notes"] = row["notes"]
         statuses[row["county_fips"]] = entry
     return statuses
 
 
-def set_manual_county_status(county_fips, status, customer_name=None, customer_email=None):
+def set_manual_county_status(
+    county_fips, status, customer_name=None, customer_email=None, customer_phone=None, notes=None,
+):
     if status == "not_started":
         _get_client().table("county_manual_status").delete().eq("county_fips", county_fips).execute()
     else:
@@ -176,6 +182,7 @@ def set_manual_county_status(county_fips, status, customer_name=None, customer_e
             {
                 "county_fips": county_fips, "status": status,
                 "customer_name": customer_name, "customer_email": customer_email,
+                "customer_phone": customer_phone, "notes": notes,
             },
             on_conflict="county_fips",
         ).execute()

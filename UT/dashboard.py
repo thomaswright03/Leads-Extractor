@@ -356,6 +356,8 @@ def handle_set_county_status(payload, restrict_to_marking_sold=False):
 
     customer_name = str(payload.get("customerName", "")).strip()
     customer_email = str(payload.get("customerEmail", "")).strip()
+    customer_phone = str(payload.get("customerPhone", "")).strip()
+    notes = str(payload.get("notes", "")).strip()
     if status == "sold":
         # This records a sale closed outside the self-serve signup/Stripe
         # flow (e.g. the sales rep closed it directly) - it doesn't create
@@ -369,6 +371,8 @@ def handle_set_county_status(payload, restrict_to_marking_sold=False):
         fips, status,
         customer_name=customer_name or None,
         customer_email=customer_email or None,
+        customer_phone=customer_phone or None,
+        notes=notes or None,
     )
     return 200, {"ok": True}
 
@@ -3351,11 +3355,13 @@ MAP_HTML = """<!doctype html>
   }
   .county-panel h3 { margin: 0 0 10px; font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 19px; }
   .county-panel p { margin: 4px 0; font-size: 13.5px; }
-  .county-panel select, .county-panel input[type="text"], .county-panel input[type="email"] {
+  .county-panel select, .county-panel input[type="text"], .county-panel input[type="email"],
+  .county-panel input[type="tel"], .county-panel textarea {
     margin-top: 10px; width: 100%; padding: 9px 10px; border: 1.5px solid #e9e2d2;
     border-radius: 8px; font-size: 13.5px; font-family: inherit; background: #fdfcfa;
   }
-  .county-panel select:focus, .county-panel input:focus { outline: none; border-color: #a6822e; }
+  .county-panel textarea { resize: vertical; }
+  .county-panel select:focus, .county-panel input:focus, .county-panel textarea:focus { outline: none; border-color: #a6822e; }
   .county-panel label.field-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #707b8d; margin-top: 14px; }
   #county-panel-mark-sold { margin-top: 14px; }
   #confirm-sold-btn { background: #101d33; color: #fff; border-color: #101d33; }
@@ -3408,6 +3414,10 @@ MAP_HTML = """<!doctype html>
         <input type="text" id="sold-customer-name" placeholder="Jane Agent">
         <label class="field-label" for="sold-customer-email">Customer Email</label>
         <input type="email" id="sold-customer-email" placeholder="jane@example.com">
+        <label class="field-label" for="sold-customer-phone">Agent Phone Number</label>
+        <input type="tel" id="sold-customer-phone" placeholder="(555) 555-5555">
+        <label class="field-label" for="sold-notes">Notes</label>
+        <textarea id="sold-notes" rows="3" placeholder="Anything worth remembering about this sale"></textarea>
         <button type="button" id="confirm-sold-btn" style="margin-top:12px;">Confirm Sale</button>
       </div>
     </div>
@@ -3448,6 +3458,8 @@ MAP_HTML = """<!doctype html>
   const markSoldForm = document.getElementById('mark-sold-form');
   const soldNameInput = document.getElementById('sold-customer-name');
   const soldEmailInput = document.getElementById('sold-customer-email');
+  const soldPhoneInput = document.getElementById('sold-customer-phone');
+  const soldNotesInput = document.getElementById('sold-notes');
   const confirmSoldBtn = document.getElementById('confirm-sold-btn');
   let currentPanelFips = null;
   let currentPanelName = null;
@@ -3533,9 +3545,12 @@ MAP_HTML = """<!doctype html>
     panelStatusText.textContent = 'Status: ' + STATUS_LABELS[status];
 
     if (status === 'sold' && entry && entry.customerEmail) {
-      panelCustomer.textContent = entry.customerName
-        ? `Customer: ${entry.customerName} (${entry.customerEmail})`
-        : 'Customer: ' + entry.customerEmail;
+      let customerHtml = entry.customerName
+        ? `Customer: ${escapeXml(entry.customerName)} (${escapeXml(entry.customerEmail)})`
+        : 'Customer: ' + escapeXml(entry.customerEmail);
+      if (entry.customerPhone) customerHtml += '<br>Phone: ' + escapeXml(entry.customerPhone);
+      if (entry.notes) customerHtml += '<br>Notes: ' + escapeXml(entry.notes);
+      panelCustomer.innerHTML = customerHtml;
       panelCustomer.style.display = 'block';
     } else {
       panelCustomer.style.display = 'none';
@@ -3544,6 +3559,8 @@ MAP_HTML = """<!doctype html>
     markSoldForm.style.display = 'none';
     soldNameInput.value = '';
     soldEmailInput.value = '';
+    soldPhoneInput.value = '';
+    soldNotesInput.value = '';
 
     if (status === 'ready') {
       // The only manual action available for a "ready to sell" county is
@@ -3578,11 +3595,11 @@ MAP_HTML = """<!doctype html>
     if (e.target === panelOverlay) panelOverlay.classList.remove('show');
   });
 
-  async function saveCountyStatus(fips, status, customerName, customerEmail) {
+  async function saveCountyStatus(fips, status, customerName, customerEmail, customerPhone, notes) {
     const resp = await fetch('/api/map/set-status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fips, status, customerName, customerEmail }),
+      body: JSON.stringify({ fips, status, customerName, customerEmail, customerPhone, notes }),
     });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
@@ -3594,6 +3611,8 @@ MAP_HTML = """<!doctype html>
       const entry = { status };
       if (customerName) entry.customerName = customerName;
       if (customerEmail) entry.customerEmail = customerEmail;
+      if (customerPhone) entry.customerPhone = customerPhone;
+      if (notes) entry.notes = notes;
       statusMap[fips] = entry;
     }
     const shape = stateSvgWrap.querySelector(`.county-shape[data-fips="${fips}"]`);
@@ -3623,13 +3642,15 @@ MAP_HTML = """<!doctype html>
     const fips = currentPanelFips;
     const customerName = soldNameInput.value.trim();
     const customerEmail = soldEmailInput.value.trim();
+    const customerPhone = soldPhoneInput.value.trim();
+    const notes = soldNotesInput.value.trim();
     if (!customerEmail || !customerEmail.includes('@')) {
       alert('Enter a valid customer email.');
       return;
     }
     confirmSoldBtn.disabled = true;
     try {
-      await saveCountyStatus(fips, 'sold', customerName, customerEmail);
+      await saveCountyStatus(fips, 'sold', customerName, customerEmail, customerPhone, notes);
       renderPanelStatus(fips, currentPanelName);
     } catch (err) {
       alert(err.message);

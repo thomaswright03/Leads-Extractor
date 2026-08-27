@@ -118,5 +118,7 @@ create table if not exists county_manual_status (
     status text not null,
     customer_name text,
     customer_email text,
+    customer_phone text,
+    notes text,
     updated_at timestamptz not null default now()
 );
