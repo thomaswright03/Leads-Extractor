@@ -33,6 +33,24 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").sp
 def is_admin(email):
     return bool(email) and email.strip().lower() in ADMIN_EMAILS
 
+# Comma-separated allowlist for a restricted role that can only view The Map
+# and mark a "ready to sell" (yellow) county "sold" (green) - nothing else.
+# Used for someone (e.g. a sales rep) who closes sales but shouldn't see
+# lead data, send letters, or touch a county's building/not-started status.
+# An admin email already has full map access, so it doesn't need to appear
+# here too.
+MAP_EDITOR_EMAILS = {e.strip().lower() for e in os.environ.get("MAP_EDITOR_EMAILS", "").split(",") if e.strip()}
+
+
+def is_map_editor(email):
+    return bool(email) and email.strip().lower() in MAP_EDITOR_EMAILS
+
+
+def is_map_only(email):
+    """True for a session that should see nothing but The Map - a map
+    editor who isn't also a full admin."""
+    return is_map_editor(email) and not is_admin(email)
+
 # For The Map (see /map, /api/map/*): the only counties with a real,
 # functioning pipeline folder are these three - everything else on the map
 # is either "not started" or manually flagged "building" (see
@@ -286,12 +304,12 @@ def handle_delete_pdf_template(payload):
     return 200, {"ok": True}
 
 
-def handle_map_status():
-    """For The Map: every US county's pipeline-progress status, keyed by
-    5-digit FIPS code. A county missing from this dict is "not started" -
-    the frontend already has every county's shape/name from the public
-    us-atlas topojson it fetches directly, so this only needs to carry the
-    handful of counties that actually have something to report."""
+def _compute_all_county_statuses():
+    """Every US county's pipeline-progress status, keyed by 5-digit FIPS
+    code. A county missing from this dict is "not started". Factored out of
+    handle_map_status so handle_set_county_status can also check a single
+    county's current computed status (needed to enforce a restricted map
+    editor's "only ready -> sold" rule)."""
     statuses = dict(pipeline_db.get_manual_county_statuses())
     for folder_key, fips in COUNTY_FOLDER_TO_FIPS.items():
         owner = pipeline_db.get_county_owner(folder_key)
@@ -306,15 +324,32 @@ def handle_map_status():
             # handle_set_county_status) as-is; otherwise this pipeline
             # folder existing with no owner means "ready to sell".
             statuses[fips] = {"status": "ready"}
-    return 200, statuses
+    return statuses
 
 
-def handle_set_county_status(payload):
+def handle_map_status():
+    """For The Map: the frontend already has every county's shape/name from
+    the public us-atlas topojson it fetches directly, so this only needs to
+    carry the handful of counties that actually have something to report."""
+    return 200, _compute_all_county_statuses()
+
+
+def handle_set_county_status(payload, restrict_to_marking_sold=False):
+    """restrict_to_marking_sold is set for a session that's a map editor but
+    not a full admin (see is_map_only) - it can only flip a county that's
+    currently "ready to sell" to "sold", nothing else, regardless of what a
+    crafted request claims."""
     fips = str(payload.get("fips", "")).strip()
     status = str(payload.get("status", "")).strip()
     if not re.fullmatch(r"\d{5}", fips):
         return 400, {"error": "Invalid county FIPS code."}
-    if status not in ("not_started", "building", "sold"):
+
+    if restrict_to_marking_sold:
+        if status != "sold":
+            return 403, {"error": "This account can only mark a county as sold."}
+        if _compute_all_county_statuses().get(fips, {}).get("status") != "ready":
+            return 400, {"error": "That county isn't ready to sell yet."}
+    elif status not in ("not_started", "building", "sold"):
         # 'ready' is always computed from COUNTY_FOLDER_TO_FIPS and county
         # ownership - never stored, so never settable here.
         return 400, {"error": "Status must be 'not_started', 'building', or 'sold'."}
@@ -3285,16 +3320,16 @@ MAP_HTML = """<!doctype html>
   header.top h1 { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 24px; margin: 8px 0 0; }
   .wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 80px; }
   .sub { color: #707b8d; font-size: 13.5px; margin: 0 0 16px; }
-  .map-card { background: #fff; border: 1px solid #e9e2d2; border-radius: 14px; padding: 20px; }
+  .map-card { background: #0a0e17; border: 1px solid #232c3b; border-radius: 14px; padding: 20px; }
   button { font-family: inherit; cursor: pointer; border-radius: 999px; padding: 9px 18px; font-size: 13px; font-weight: 700; border: 1.5px solid #e9e2d2; background: #fff; color: #232c3b; }
   button:hover { border-color: #a6822e; }
   h2#state-heading { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 21px; margin: 16px 0 4px; }
-  .state-shape { fill: #eef1f5; stroke: #fff; stroke-width: 0.6; cursor: pointer; transition: fill 0.1s; }
-  .state-shape:hover { fill: #dde5f0; }
-  .state-label { font-size: 9.5px; font-weight: 700; fill: #232c3b; text-anchor: middle; pointer-events: none; }
-  .county-shape { stroke: #fff; stroke-width: 0.6; cursor: pointer; }
+  .state-shape { fill: #1c2333; stroke: #0a0e17; stroke-width: 0.6; cursor: pointer; transition: fill 0.1s; }
+  .state-shape:hover { fill: #323d54; }
+  .state-label { font-size: 9.5px; font-weight: 700; fill: #f4f1ea; text-anchor: middle; pointer-events: none; }
+  .county-shape { stroke: #0a0e17; stroke-width: 0.6; cursor: pointer; }
   .county-shape:hover { opacity: 0.78; }
-  .county-shape.status-not_started { fill: #eef1f5; }
+  .county-shape.status-not_started { fill: #1c2333; }
   .county-shape.status-building { fill: #d9534f; }
   .county-shape.status-ready { fill: #e8c04a; }
   .county-shape.status-sold { fill: #3f9860; }
@@ -3382,8 +3417,15 @@ MAP_HTML = """<!doctype html>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://unpkg.com/topojson-client@3"></script>
 <script>
+  const IS_MAP_EDITOR_ONLY = __IS_MAP_EDITOR_ONLY__;
   const WIDTH = 975, HEIGHT = 610;
   const STATUS_LABELS = { not_started: 'Not started', building: 'Being built', ready: 'Ready to sell', sold: 'Sold' };
+
+  function escapeXml(str) {
+    return String(str || '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
+    }[c]));
+  }
 
   let statesFeatures = [];
   let countiesFeatures = [];
@@ -3429,7 +3471,7 @@ MAP_HTML = """<!doctype html>
     let svg = `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" style="width:100%; height:auto; display:block;">`;
     statesFeatures.forEach((f) => {
       const d = path(f);
-      if (d) svg += `<path class="state-shape" data-fips="${f.id}" d="${d}"></path>`;
+      if (d) svg += `<path class="state-shape" data-fips="${f.id}" d="${d}"><title>${escapeXml(f.properties.name)}</title></path>`;
     });
     statesFeatures.forEach((f) => {
       const total = totalByState[f.id] || 0;
@@ -3462,8 +3504,8 @@ MAP_HTML = """<!doctype html>
       const d = path(f);
       if (!d) return;
       const st = countyStatus(f.id);
-      const name = (f.properties.name || '').replace(/"/g, '&quot;');
-      svg += `<path class="county-shape status-${st}" data-fips="${f.id}" data-name="${name}" d="${d}"></path>`;
+      const rawName = f.properties.name || '';
+      svg += `<path class="county-shape status-${st}" data-fips="${f.id}" data-name="${escapeXml(rawName)}" d="${d}"><title>${escapeXml(rawName)}</title></path>`;
     });
     svg += `</svg>`;
     stateSvgWrap.innerHTML = stateCounties.length
@@ -3509,7 +3551,10 @@ MAP_HTML = """<!doctype html>
       // once a real script exists for it.
       statusControlWrap.style.display = 'none';
       markSoldWrap.style.display = 'block';
-    } else if (status === 'sold') {
+    } else if (status === 'sold' || IS_MAP_EDITOR_ONLY) {
+      // A map-only account (see is_map_only in dashboard.py) can never
+      // touch "building"/"not started" - the server would reject it anyway,
+      // so don't even show a control that can't work.
       statusControlWrap.style.display = 'none';
       markSoldWrap.style.display = 'none';
     } else {
@@ -3631,6 +3676,15 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        # A map-only account (see is_map_only) never sees the real dashboard,
+        # the PDF wizard, or anything else - it's bounced straight to the one
+        # page it's allowed to use.
+        if is_map_only(get_session_email(self)) and self.path not in ("/map", "/api/map/status"):
+            self.send_response(302)
+            self.send_header("Location", "/map")
+            self.end_headers()
+            return
+
         if self.path == "/create-template":
             if not get_session_email(self):
                 self.send_response(302)
@@ -3646,12 +3700,14 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if self.path == "/map":
-            if not is_admin(get_session_email(self)):
+            email = get_session_email(self)
+            if not (is_admin(email) or is_map_editor(email)):
                 self.send_response(302)
                 self.send_header("Location", "/")
                 self.end_headers()
                 return
-            body = MAP_HTML.encode("utf-8")
+            page = MAP_HTML.replace("__IS_MAP_EDITOR_ONLY__", "true" if is_map_only(email) else "false")
+            body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -3660,7 +3716,8 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/map/status":
-            if not is_admin(get_session_email(self)):
+            email = get_session_email(self)
+            if not (is_admin(email) or is_map_editor(email)):
                 self._send_json(403, {"error": "Admin access required."})
                 return
             status, response = handle_map_status()
@@ -3753,6 +3810,13 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(401, {"error": "Not signed in."})
             return
 
+        # A map-only account (see is_map_only) can't reach any other
+        # authenticated endpoint - not through the UI (it's redirected away,
+        # see do_GET), and not by hitting an API directly either.
+        if is_map_only(get_session_email(self)) and self.path != "/api/map/set-status":
+            self._send_json(403, {"error": "This account only has access to The Map."})
+            return
+
         if self.path == "/api/upload-pdf-template":
             fields = _parse_multipart(self.headers.get("Content-Type", ""), raw_body)
             try:
@@ -3778,7 +3842,8 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/map/set-status":
-            if not is_admin(get_session_email(self)):
+            email = get_session_email(self)
+            if not (is_admin(email) or is_map_editor(email)):
                 self._send_json(403, {"error": "Admin access required."})
                 return
             try:
@@ -3786,7 +3851,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send_json(400, {"error": "Invalid JSON body"})
                 return
-            status, response = handle_set_county_status(payload)
+            status, response = handle_set_county_status(payload, restrict_to_marking_sold=is_map_only(email))
             self._send_json(status, response)
             return
 
