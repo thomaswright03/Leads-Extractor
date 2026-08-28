@@ -115,6 +115,30 @@ def _ensure_guest_session(driver):
         WebDriverWait(driver, 20).until(lambda d: d.find_elements(By.ID, "OwnerIDSearchString"))
 
 
+def _new_driver_with_session(max_attempts=3):
+    """Create a driver and establish its guest session, retrying the whole
+    thing on a transient failure here rather than letting it crash the
+    entire run unhandled - confirmed live: a bare net::ERR_CONNECTION_RESET
+    hitting this exact step (not a lookup, just the initial/recovery
+    session setup) previously killed the whole script even with confirmed
+    leads already sitting there waiting to be priced."""
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        driver = create_driver()
+        try:
+            _ensure_guest_session(driver)
+            return driver
+        except Exception as e:
+            last_exc = e
+            print(f"Couldn't establish a session (attempt {attempt}/{max_attempts}): {e}")
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            time.sleep(2)
+    raise last_exc
+
+
 def get_property_value(driver, parcel_id):
     driver.get(ACCOUNT_URL.format(parcel_id=parcel_id))
     if driver.title == "Login" or driver.find_elements(By.XPATH, GUEST_LOGIN_XPATH):
@@ -150,10 +174,8 @@ if __name__ == "__main__":
     if last_run_mode and last_run_mode != mode:
         print(f"Note: DC.py's last run was '{last_run_mode}' mode - pricing those {len(matches_paths)} file(s) regardless of the mode picked here.")
 
-    driver = create_driver()
+    driver = _new_driver_with_session()
     try:
-        _ensure_guest_session(driver)
-
         for matches_path in matches_paths:
             df = pd.read_excel(matches_path)
             if df.empty:
@@ -191,8 +213,7 @@ if __name__ == "__main__":
                             driver.quit()
                         except Exception:
                             pass
-                        driver = create_driver()
-                        _ensure_guest_session(driver)
+                        driver = _new_driver_with_session()
                     except Exception as e:
                         print(f"  -> Failed to get property value: {e}")
                         break
