@@ -1,9 +1,11 @@
 import pandas as pd
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 import sys
 import time
 import re
+import shutil
+import subprocess
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os  # <-- Added for file deletion
@@ -11,6 +13,35 @@ from urllib.parse import urlparse, parse_qs
 
 import pipeline_db
 import geocode
+
+CHROME_BINARY_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium-browser",
+    "chromium",
+]
+
+
+def detect_chrome_major_version():
+    """undetected_chromedriver's own version auto-detection can grab a
+    ChromeDriver build that's newer than the actually installed Chrome
+    (seen going for 151 while Chrome was still on 150), which breaks the
+    session entirely. Pin it to the real installed major version instead.
+    Tries macOS's fixed app path first, then whatever Chrome/Chromium
+    binary is on PATH (e.g. Linux CI runners)."""
+    for candidate in CHROME_BINARY_CANDIDATES:
+        binary = shutil.which(candidate)
+        if not binary:
+            continue
+        try:
+            output = subprocess.check_output([binary, "--version"], text=True)
+            match = re.search(r"(\d+)\.", output)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            continue
+    return None
 
 # Four straight fix attempts (webdriver_manager removal, ~/Downloads
 # creation, --disable-gpu, --disable-popup-blocking) all left the exact same
@@ -92,7 +123,7 @@ for index, (name, posted_date) in enumerate(names_with_dates):
     last_name = extract_last_name(name)
     first_name = extract_first_name(name)
 
-    options = webdriver.ChromeOptions()
+    options = uc.ChromeOptions()
     # options.add_argument('--headless')  # Uncomment if you want headless
     options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
@@ -115,12 +146,10 @@ for index, (name, posted_date) in enumerate(names_with_dates):
         "safebrowsing.enabled": True,
     })
 
-    # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
-    # handle the chromedriver binary - switched from webdriver_manager's
-    # ChromeDriverManager().install(), which started failing every single
-    # search silently in CI (confirmed live: SLKobi.py in this same
-    # workflow, which never used webdriver_manager, kept working fine).
-    driver = webdriver.Chrome(options=options)
+    # undetected_chromedriver, not plain webdriver.Chrome(), for consistency
+    # with every other driver-creating script in this pipeline.
+    chrome_major = detect_chrome_major_version()
+    driver = uc.Chrome(options=options, version_main=chrome_major) if chrome_major else uc.Chrome(options=options)
 
     try:
         _log(f"Searching for last name: {last_name}")

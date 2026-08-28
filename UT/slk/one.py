@@ -1,11 +1,9 @@
 import time
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 ADDRESS_BOX_XPATH = "/html/body/section[3]/div/div/main/section[1]/div[2]/div[1]/form/p[2]/input"
 AUTOCOMPLETE_XPATH = "/html/body/ul/li/div"
@@ -20,12 +18,11 @@ TEST_ADDRESSES = [
     "2024 E PRINCETON DR",
 ]
 
-options = webdriver.ChromeOptions()
+options = uc.ChromeOptions()
 # Not eager - we need the page's autocomplete JS fully wired up before typing.
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service, options=options)
+driver = uc.Chrome(options=options)
 
 try:
     driver.get("https://www.saltlakecounty.gov/assessor/")

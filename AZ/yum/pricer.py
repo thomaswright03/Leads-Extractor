@@ -1,11 +1,14 @@
 import json
 import os
 import random
+import re
+import shutil
+import subprocess
 import sys
 import time
 
 import pandas as pd
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -13,6 +16,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 import pipeline_db
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CHROME_BINARY_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium-browser",
+    "chromium",
+]
 
 # Written by DC.py at the end of its run - lists exactly the file(s) it just
 # produced (one "today" file in daily mode, or one per posted date in weekly
@@ -40,16 +51,35 @@ def get_last_run():
     return data.get("mode"), paths
 
 
+def detect_chrome_major_version():
+    """undetected_chromedriver's own version auto-detection can grab a
+    ChromeDriver build that's newer than the actually installed Chrome
+    (seen going for 151 while Chrome was still on 150), which breaks the
+    session entirely. Pin it to the real installed major version instead.
+    Tries macOS's fixed app path first, then whatever Chrome/Chromium
+    binary is on PATH (e.g. Linux CI runners)."""
+    for candidate in CHROME_BINARY_CANDIDATES:
+        binary = shutil.which(candidate)
+        if not binary:
+            continue
+        try:
+            output = subprocess.check_output([binary, "--version"], text=True)
+            match = re.search(r"(\d+)\.", output)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            continue
+    return None
+
+
 def create_driver():
-    # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
-    # handle the chromedriver binary - webdriver_manager's separate
-    # ChromeDriverManager().install() has been seen failing every single
-    # call in CI (confirmed live for UT/slk's equivalent script), so this
-    # avoids that whole failure mode rather than working around it.
-    options = webdriver.ChromeOptions()
+    # undetected_chromedriver, not plain webdriver.Chrome() - this site's
+    # own confirmed-live AWS WAF bot-detection (see $.py) applies here too.
+    options = uc.ChromeOptions()
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(options=options)
+    chrome_major = detect_chrome_major_version()
+    return uc.Chrome(options=options, version_main=chrome_major) if chrome_major else uc.Chrome(options=options)
 
 
 def _account_not_found(driver):

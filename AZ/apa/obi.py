@@ -1,19 +1,53 @@
+import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime
 
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 
 import pipeline_db
 
 MODE = pipeline_db.resolve_mode(sys.argv)
 TODAY = datetime.now().date()
 
-# Set up Chrome options
-chrome_options = Options()
+CHROME_BINARY_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",  # macOS
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium-browser",
+    "chromium",
+]
+
+
+def detect_chrome_major_version():
+    """undetected_chromedriver's own version auto-detection can grab a
+    ChromeDriver build that's newer than the actually installed Chrome
+    (seen going for 151 while Chrome was still on 150), which breaks the
+    session entirely. Pin it to the real installed major version instead.
+    Tries macOS's fixed app path first, then whatever Chrome/Chromium
+    binary is on PATH (e.g. Linux CI runners)."""
+    for candidate in CHROME_BINARY_CANDIDATES:
+        binary = shutil.which(candidate)
+        if not binary:
+            continue
+        try:
+            output = subprocess.check_output([binary, "--version"], text=True)
+            match = re.search(r"(\d+)\.", output)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            continue
+    return None
+
+
+# Set up Chrome options - undetected_chromedriver, not plain webdriver.Chrome(),
+# since Legacy.com (this script's target) is already known to need it
+# elsewhere in this pipeline (see DC.py's identical per-name searches there).
+chrome_options = uc.ChromeOptions()
 # Don't block driver.get() on images/ads/trackers finishing to load -
 # the WebDriverWait below already waits for the specific elements we need.
 chrome_options.page_load_strategy = "eager"
@@ -24,7 +58,8 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 
 # Initialize the Chrome driver
-driver = webdriver.Chrome(options=chrome_options)
+_chrome_major = detect_chrome_major_version()
+driver = uc.Chrome(options=chrome_options, version_main=_chrome_major) if _chrome_major else uc.Chrome(options=chrome_options)
 
 # Legacy.com's own county-level browse page - the same URL pattern works for
 # every county in the country (.../local/<state>/<county>-county), with the
