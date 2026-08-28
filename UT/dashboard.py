@@ -68,6 +68,7 @@ COUNTY_FOLDER_TO_FIPS = {
     "gra": "04009",  # Graham County, AZ
     "pim": "04019",  # Pima County, AZ
     "gil": "04007",  # Gila County, AZ
+    "yum": "04027",  # Yuma County, AZ
 }
 
 # The Map only knows FIPS codes (they come from the public us-atlas
@@ -545,6 +546,18 @@ COUNTIES = [
         # page first either way (same as Apache's identical setup), but
         # this is a real deep link to the specific parcel once logged in.
         "parcel_url_base": "https://gilacountyaz-assessor.tylerhost.net/assessor/taxweb/account.jsp?accountNum=",
+    },
+    {
+        "folder": "yum",
+        "path": "../AZ/yum",
+        "label": "Yuma County",
+        "state": "AZ",
+        # Same Tyler Technologies EagleWeb/TaxWeb platform as Gila and
+        # Apache Counties - a real, stable, bookmarkable deep link to the
+        # specific parcel once logged in (same login-wall caveat as those
+        # two: an unauthenticated visitor still gets bounced to a login
+        # page first).
+        "parcel_url_base": "https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/account.jsp?accountNum=",
     },
 ]
 

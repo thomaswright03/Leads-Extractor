@@ -1,4 +1,3 @@
-import math
 import random
 import re
 import sys
@@ -162,58 +161,61 @@ def parse_result_rows(driver):
     return rows
 
 
-PAGE_INFO_RE = re.compile(r"Showing\s+(\d+)\s+results?\s+on\s+(\d+)\s+pages?", re.IGNORECASE)
+START_RE = re.compile(r"[?&]start=(\d+)")
+
+
+def _current_start(driver):
+    match = START_RE.search(driver.current_url)
+    return int(match.group(1)) if match else 0
+
+
+def _next_page_url(driver):
+    """The smallest "start=" offset link on the current page that's greater
+    than the current page's own offset - i.e. the real "next page" link.
+    Confirmed live on Yuma County's identical deployment of this platform:
+    its numbered pager (e.g. "1 2 3 ... 34 Next->") is plain
+    "results.jsp?start=<N>" links - development hit this county's own
+    CAPTCHA wall before a genuine page-2+ link could be inspected directly
+    here, but it's the same platform, so this reuses Yuma's confirmed
+    mechanism instead of a page-size guess."""
+    current = _current_start(driver)
+    candidates = []
+    for a in driver.find_elements(By.CSS_SELECTOR, "a[href*='start=']"):
+        href = a.get_attribute("href") or ""
+        match = START_RE.search(href)
+        if match:
+            start = int(match.group(1))
+            if start > current:
+                candidates.append((start, href))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda pair: pair[0])
+    return candidates[0][1]
 
 
 def collect_candidates(driver):
     """All real-property (account_num, owner_name) rows across every page
-    of the current search's results.
-
-    Pagination note: this app's own "Sort Search Results" control (visible
-    in its inline JS) navigates via "results.jsp?start=<N>&sort=<field>&
-    dir=<dir>" - confirmed live. That confirms "start" is this app's real
-    pagination offset param, but development hit this site's CAPTCHA wall
-    (see CaptchaBlockedError) before a genuine page-2+ link could be
-    inspected directly. This reconstructs page URLs from that confirmed
-    offset scheme rather than guessing blind, with a same-page-again check
-    below as a safety net in case that reconstruction is ever wrong for a
-    future layout change.
-    """
-    body_text = driver.find_element(By.TAG_NAME, "body").text
-    if "Showing 0" in body_text:
+    of the current search's results, following the page's own real "next
+    page" links rather than guessing offsets."""
+    if "Showing 0" in driver.find_element(By.TAG_NAME, "body").text:
         return []
 
     seen = {}
     for account_num, owner_name in parse_result_rows(driver):
         seen[account_num] = owner_name
 
-    match = PAGE_INFO_RE.search(body_text)
-    if not match:
-        return list(seen.items())
-
-    total_results, total_pages = int(match.group(1)), int(match.group(2))
-    if total_pages <= 1:
-        return list(seen.items())
-
-    page_size = math.ceil(total_results / total_pages)
-    print(f"  {total_results} results across {total_pages} pages (~{page_size}/page) - paging through.")
-
-    for page_num in range(1, min(total_pages, MAX_PAGES)):
-        start = page_num * page_size
-        driver.get(f"https://gilacountyaz-assessor.tylerhost.net/assessor/taxweb/results.jsp?start={start}&sort=Account_Number&dir=ascend")
+    for _ in range(MAX_PAGES - 1):
+        next_url = _next_page_url(driver)
+        if not next_url:
+            break
+        driver.get(next_url)
         WebDriverWait(driver, 20).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']")
             or "Showing 0" in d.page_source
             or d.title == "Human Verification"
         )
         _check_not_walled(driver)
-
-        page_rows = parse_result_rows(driver)
-        new_accounts = [a for a, _ in page_rows if a not in seen]
-        if not new_accounts:
-            print(f"  Page {page_num + 1} returned no new accounts - stopping pagination (offset guess may be off).")
-            break
-        for account_num, owner_name in page_rows:
+        for account_num, owner_name in parse_result_rows(driver):
             seen[account_num] = owner_name
 
     return list(seen.items())

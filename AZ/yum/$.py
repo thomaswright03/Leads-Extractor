@@ -1,0 +1,338 @@
+import re
+import sys
+import random
+import time
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+
+import pipeline_db
+import geocode
+
+# Yuma County's assessor site runs on the exact same Tyler Technologies
+# EagleWeb/TaxWeb platform as Apache and Gila Counties (confirmed live:
+# identical field ids - OwnerIDSearchString/OwnerIDSearchType - identical
+# result-row markup - tr.tableRow1/2, td.clickable, nested "a table" summary
+# cell - and identical account.jsp detail-page layout). Unlike Gila, the
+# bare "?guest=true" query-param shortcut on search.jsp works immediately
+# here (confirmed live, same as Apache) - no click-through login form needed.
+SEARCH_URL = "https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/search.jsp"
+ACCOUNT_URL = "https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/account.jsp?accountNum={account_num}&guest=true"
+RESULTS_URL_BASE = "https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/results.jsp"
+
+# Kept as a fallback in case a future deployment change here ever stops
+# honoring the "?guest=true" query-param shortcut above, same as Gila's
+# identical form (confirmed live: a "Public User Login" page with a
+# guest=true hidden field, POSTed via this button).
+GUEST_LOGIN_XPATH = "//form[.//input[@name='guest']]//input[@type='submit']"
+
+ZIP_RE = re.compile(r"\b(\d{5})\b")
+
+# Yuma is Arizona's 4th-largest county by population - a common surname
+# (e.g. "Garcia") has been seen live spanning 34 result pages (1377 matches,
+# capped by EagleWeb itself at 1000 browsable) - far more than Gila's 3
+# pages for "Smith". MAX_PAGES stays a modest safety cap regardless (same
+# reasoning as every other county here: not worth dozens of page loads
+# chasing one surname when the first-name filter still has to run per row).
+MAX_PAGES = 6
+
+
+def create_driver():
+    # Plain webdriver.Chrome() lets Selenium's own built-in driver manager
+    # handle the chromedriver binary - webdriver_manager's separate
+    # ChromeDriverManager().install() has been seen failing every single
+    # call in CI (confirmed live for UT/slk's equivalent script), so this
+    # avoids that whole failure mode rather than working around it.
+    options = webdriver.ChromeOptions()
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    return webdriver.Chrome(options=options)
+
+
+class CaptchaBlockedError(Exception):
+    """Raised if this site's AWS WAF bot-detection throws up a "Human
+    Verification" CAPTCHA wall - confirmed live on Gila County's identical
+    deployment of this same platform, at a fixed point in a long-running
+    session (not simply time-based - see AZ/gil/$.py for the full writeup).
+    Solving/bypassing a CAPTCHA is off the table on principle, so this stops
+    the whole run rather than trying to click through it."""
+
+
+def _check_not_walled(driver):
+    if driver.title == "Human Verification" or "let's confirm you are human" in driver.page_source.lower():
+        raise CaptchaBlockedError(
+            "Yuma County's assessor site put up its AWS WAF 'Human "
+            "Verification' CAPTCHA wall. This pipeline will not attempt to "
+            "solve it. Stop and retry later with more spacing between "
+            "requests, or from a different network."
+        )
+
+
+GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def _strip_suffix_clause(full_name):
+    """Obituary listing names occasionally carry a trailing rank/title
+    clause after a comma (e.g. "David J Kitchin III, Lt Col/R") - a
+    comma-separated generational suffix (e.g. "Robert Smith, Jr.") is kept,
+    since that's part of the actual name."""
+    name, sep, suffix = full_name.partition(",")
+    if sep and suffix.strip().rstrip(".").lower() not in GENERATIONAL_SUFFIXES:
+        return name.strip()
+    return full_name.strip()
+
+
+def extract_last_name(full_name):
+    name_parts = _strip_suffix_clause(full_name).split()
+    while name_parts and name_parts[-1].lower().rstrip(".") in GENERATIONAL_SUFFIXES:
+        name_parts = name_parts[:-1]
+    name_parts = re.sub(r"\(.*?\)", "", " ".join(name_parts)).split()
+    # A kept comma-separated generational suffix (e.g. "Robert Smith, Jr.")
+    # leaves its comma stuck to the word before it once the suffix word
+    # itself is stripped off above ("Smith," not "Smith") - strip it here so
+    # a plain-text search field doesn't get a trailing comma that would
+    # silently match nothing.
+    return name_parts[-1].rstrip(",") if name_parts else ""
+
+
+def extract_first_name(full_name):
+    name_parts = re.sub(r"\(.*?\)", "", _strip_suffix_clause(full_name)).split()
+    return name_parts[0] if name_parts else ""
+
+
+def ensure_logged_in(driver):
+    driver.get(f"{SEARCH_URL}?guest=true")
+    _check_not_walled(driver)
+    if driver.find_elements(By.ID, "OwnerIDSearchString"):
+        return
+    guest_buttons = driver.find_elements(By.XPATH, GUEST_LOGIN_XPATH)
+    if guest_buttons:
+        guest_buttons[0].click()
+    WebDriverWait(driver, 20).until(lambda d: d.find_elements(By.ID, "OwnerIDSearchString"))
+    _check_not_walled(driver)
+
+
+def search_last_name(driver, last_name):
+    ensure_logged_in(driver)
+    field = driver.find_element(By.ID, "OwnerIDSearchString")
+    field.clear()
+    field.send_keys(last_name)
+    # Exactly one <form> on this page (confirmed live, same as Gila's
+    # identical deployment), so exactly one submit control regardless of
+    # tag - <input type=submit> vs <button type=submit> varies by exact
+    # deployment, so accept either.
+    driver.find_elements(By.CSS_SELECTOR, "input[type='submit'], button[type='submit']")[0].click()
+    WebDriverWait(driver, 20).until(
+        lambda d: d.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']")
+        or "Showing 0" in d.page_source
+        or d.title == "Human Verification"
+    )
+    _check_not_walled(driver)
+
+
+def parse_result_rows(driver):
+    """Account number + owner name straight off the results list - cheap,
+    no extra page load. Used to filter down to first-name matches before
+    spending a page load on each candidate's account detail page. Real-
+    property accounts only (account numbers starting with "R") - "M"
+    (mobile home) and "C" (business/commercial) accounts aren't the kind of
+    real-estate probate lead this business targets (confirmed live: a
+    "Garcia" search returns hundreds of "M" mobile-home accounts alongside
+    the "R" ones - this is a border county with a lot of manufactured
+    housing)."""
+    rows = []
+    for tr in driver.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']"):
+        try:
+            account_num = tr.find_element(By.CSS_SELECTOR, "td.clickable a").text.strip()
+            if not account_num.startswith("R"):
+                continue
+            # Scoping to the nested summary table itself (not `tr`) matters:
+            # every cell in it also carries class="clickable", same as the
+            # row's own outer cells - searching from `tr` for "td.clickable"
+            # would double up and shift indexes (same gotcha documented in
+            # apa/$.py and gil/$.py for this identical platform).
+            summary_table = tr.find_element(By.CSS_SELECTOR, "a table")
+            cells = summary_table.find_elements(By.CSS_SELECTOR, "td")
+            owner_name = cells[1].text.strip() if len(cells) > 1 else ""
+            if account_num and owner_name:
+                rows.append((account_num, owner_name))
+        except Exception:
+            continue
+    return rows
+
+
+START_RE = re.compile(r"[?&]start=(\d+)")
+
+
+def _current_start(driver):
+    match = START_RE.search(driver.current_url)
+    return int(match.group(1)) if match else 0
+
+
+def _next_page_url(driver):
+    """The smallest "start=" offset link on the current page that's greater
+    than the current page's own offset - i.e. the real "next page" link,
+    not a guess reconstructed from a total/page-count division. Confirmed
+    live: this app's numbered pager (e.g. "1 2 3 ... 34 Next->") is plain
+    "results.jsp?start=<N>" links with a fixed page size of 30 - Gila's
+    identical platform almost certainly pages the same way, but development
+    hit that county's CAPTCHA wall before a real multi-page link could be
+    inspected there, so this exact approach is Yuma-only for now (see
+    gil/$.py for the page-size-division fallback used there instead)."""
+    current = _current_start(driver)
+    candidates = []
+    for a in driver.find_elements(By.CSS_SELECTOR, "a[href*='start=']"):
+        href = a.get_attribute("href") or ""
+        match = START_RE.search(href)
+        if match:
+            start = int(match.group(1))
+            if start > current:
+                candidates.append((start, href))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda pair: pair[0])
+    return candidates[0][1]
+
+
+def collect_candidates(driver):
+    """All real-property (account_num, owner_name) rows across every page
+    of the current search's results, following the page's own real "next
+    page" links rather than guessing offsets."""
+    if "Showing 0" in driver.find_element(By.TAG_NAME, "body").text:
+        return []
+
+    seen = {}
+    for account_num, owner_name in parse_result_rows(driver):
+        seen[account_num] = owner_name
+
+    for _ in range(MAX_PAGES - 1):
+        next_url = _next_page_url(driver)
+        if not next_url:
+            break
+        driver.get(next_url)
+        WebDriverWait(driver, 20).until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']")
+            or "Showing 0" in d.page_source
+            or d.title == "Human Verification"
+        )
+        _check_not_walled(driver)
+        for account_num, owner_name in parse_result_rows(driver):
+            seen[account_num] = owner_name
+
+    return list(seen.items())
+
+
+def _labeled_text(driver, tag, label):
+    els = driver.find_elements(By.XPATH, f"//{tag}[normalize-space(text())='{label}']/parent::td")
+    return els[0].text.strip() if els else ""
+
+
+def parse_account_detail(driver, account_num):
+    """Owner name and mailing address off this account's detail page."""
+    driver.get(ACCOUNT_URL.format(account_num=account_num))
+    WebDriverWait(driver, 20).until(
+        lambda d: d.find_elements(By.XPATH, "//b[normalize-space(text())='Owner Name']")
+        or "unable to complete your request" in d.page_source.lower()
+        or d.title == "Human Verification"
+    )
+    _check_not_walled(driver)
+    if "unable to complete your request" in driver.page_source.lower():
+        raise ValueError(f"Account {account_num} didn't load.")
+
+    owner_name = _labeled_text(driver, "b", "Owner Name").replace("Owner Name", "", 1).strip()
+
+    address_text = _labeled_text(driver, "b", "Owner Address").replace("Owner Address", "", 1).strip()
+    lines = [line.strip() for line in address_text.split("\n") if line.strip()]
+    street = lines[0] if lines else ""
+    city, state, zip_code = "", "", ""
+    if len(lines) > 1:
+        city_state_zip = lines[1]
+        zip_match = ZIP_RE.search(city_state_zip)
+        zip_code = zip_match.group(1) if zip_match else ""
+        before_zip = city_state_zip[: zip_match.start()].strip().rstrip(",") if zip_match else city_state_zip
+        if "," in before_zip:
+            city, state = (p.strip() for p in before_zip.rsplit(",", 1))
+        else:
+            parts = before_zip.split()
+            if len(parts) >= 2:
+                state = parts[-1]
+                city = " ".join(parts[:-1])
+
+    return owner_name, street, city, state, zip_code
+
+
+if __name__ == "__main__":
+    pipeline_db.resolve_mode(sys.argv)  # not used here, but keeps argv[1] consistent with the rest of the pipeline
+
+    names_with_dates = pipeline_db.get_obituary_names_with_dates()
+    pipeline_db.clear_matches()
+
+    print("Names to search:")
+    for name, posted_date in names_with_dates:
+        print(f"{name} ({posted_date})" if posted_date else name)
+
+    # One browser/session for the whole run, not a fresh one per name like
+    # most other counties here - same reasoning as gil/$.py: this platform's
+    # AWS WAF bot-detection (confirmed live on Gila's identical deployment)
+    # reads as behavioral/rate-based rather than tied to any one URL, and a
+    # fresh guest login for every single name would look like a burst of
+    # brand-new visitors from the same IP.
+    driver = create_driver()
+    try:
+        for name, posted_date in names_with_dates:
+            try:
+                last_name = extract_last_name(name)
+                first_name = extract_first_name(name)
+                if not last_name or not first_name:
+                    print(f"Skipping '{name}' - couldn't parse a first/last name.")
+                    continue
+
+                print(f"Searching for last name: {last_name}")
+                time.sleep(random.uniform(1.5, 3.0))
+                search_last_name(driver, last_name)
+                candidates = collect_candidates(driver)
+
+                if not candidates:
+                    print(f"No results found for {name}. Moving on.")
+                    continue
+
+                for account_num, owner_name in candidates:
+                    owner_words = owner_name.split()
+                    if not any(w.lower().startswith(first_name.lower()) for w in owner_words):
+                        continue
+
+                    try:
+                        time.sleep(random.uniform(1.0, 2.0))
+                        full_owner_name, street, city, state, zip_code = parse_account_detail(driver, account_num)
+                    except CaptchaBlockedError:
+                        raise
+                    except Exception as e:
+                        print(f"  Couldn't load account detail for {account_num}: {e}")
+                        continue
+
+                    if not street:
+                        print(f"  {account_num} ({owner_name}) has no mailing address on file - skipping.")
+                        continue
+
+                    if not city or not state or not zip_code:
+                        city, state, zip_code = geocode.geocode_address(driver, street, city or None)
+
+                    print(f"Match found for {name}: owner={full_owner_name or owner_name}, parcel={account_num}, address={street}")
+                    pipeline_db.add_match(
+                        name, full_owner_name or owner_name, account_num,
+                        street, city, state, zip_code, posted_date,
+                    )
+
+            except CaptchaBlockedError:
+                raise
+            except Exception as e:
+                print(f"Error during search for '{name}': {e}")
+
+    except CaptchaBlockedError as e:
+        print(f"\nSTOPPING: {e}")
+        raise SystemExit(1)
+    finally:
+        driver.quit()
+
+    print("Done.")
