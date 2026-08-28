@@ -6,6 +6,7 @@ import time
 
 import pandas as pd
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -141,13 +142,31 @@ if __name__ == "__main__":
                     continue
 
                 print(f"Looking up property value for '{full_name}': Parcel ID {parcel_id}")
-                try:
-                    value = get_property_value(driver, parcel_id)
-                    print(f"  -> {value}")
-                    property_values.append(value)
-                except Exception as e:
-                    print(f"  -> Failed to get property value: {e}")
-                    property_values.append("Not found")
+                value = None
+                for attempt in (1, 2):
+                    try:
+                        value = get_property_value(driver, parcel_id)
+                        print(f"  -> {value}")
+                        break
+                    except WebDriverException as e:
+                        # The long-lived browser itself died mid-run (crash,
+                        # OOM, lost connection, etc - confirmed live on
+                        # $.py's identical single-session architecture). One
+                        # retry with a brand new browser+session rather than
+                        # losing every remaining row to a dead session.
+                        print(f"  -> Browser session error (attempt {attempt}/2): {e}")
+                        if attempt == 2:
+                            break
+                        try:
+                            driver.quit()
+                        except Exception:
+                            pass
+                        driver = create_driver()
+                        _ensure_guest_session(driver)
+                    except Exception as e:
+                        print(f"  -> Failed to get property value: {e}")
+                        break
+                property_values.append(value or "Not found")
 
                 time.sleep(random.uniform(1.5, 3.0))
 

@@ -4,6 +4,7 @@ import random
 import time
 
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -262,6 +263,50 @@ def parse_account_detail(driver, account_num):
     return owner_name, street, city, state, zip_code
 
 
+def process_name(driver, name, posted_date):
+    last_name = extract_last_name(name)
+    first_name = extract_first_name(name)
+    if not last_name or not first_name:
+        print(f"Skipping '{name}' - couldn't parse a first/last name.")
+        return
+
+    print(f"Searching for last name: {last_name}")
+    time.sleep(random.uniform(1.5, 3.0))
+    search_last_name(driver, last_name)
+    candidates = collect_candidates(driver)
+
+    if not candidates:
+        print(f"No results found for {name}. Moving on.")
+        return
+
+    for account_num, owner_name in candidates:
+        owner_words = owner_name.split()
+        if not any(w.lower().startswith(first_name.lower()) for w in owner_words):
+            continue
+
+        try:
+            time.sleep(random.uniform(1.0, 2.0))
+            full_owner_name, street, city, state, zip_code = parse_account_detail(driver, account_num)
+        except (CaptchaBlockedError, WebDriverException):
+            raise
+        except Exception as e:
+            print(f"  Couldn't load account detail for {account_num}: {e}")
+            continue
+
+        if not street:
+            print(f"  {account_num} ({owner_name}) has no mailing address on file - skipping.")
+            continue
+
+        if not city or not state or not zip_code:
+            city, state, zip_code = geocode.geocode_address(driver, street, city or None)
+
+        print(f"Match found for {name}: owner={full_owner_name or owner_name}, parcel={account_num}, address={street}")
+        pipeline_db.add_match(
+            name, full_owner_name or owner_name, account_num,
+            street, city, state, zip_code, posted_date,
+        )
+
+
 if __name__ == "__main__":
     pipeline_db.resolve_mode(sys.argv)  # not used here, but keeps argv[1] consistent with the rest of the pipeline
 
@@ -281,53 +326,32 @@ if __name__ == "__main__":
     driver = create_driver()
     try:
         for name, posted_date in names_with_dates:
-            try:
-                last_name = extract_last_name(name)
-                first_name = extract_first_name(name)
-                if not last_name or not first_name:
-                    print(f"Skipping '{name}' - couldn't parse a first/last name.")
-                    continue
-
-                print(f"Searching for last name: {last_name}")
-                time.sleep(random.uniform(1.5, 3.0))
-                search_last_name(driver, last_name)
-                candidates = collect_candidates(driver)
-
-                if not candidates:
-                    print(f"No results found for {name}. Moving on.")
-                    continue
-
-                for account_num, owner_name in candidates:
-                    owner_words = owner_name.split()
-                    if not any(w.lower().startswith(first_name.lower()) for w in owner_words):
-                        continue
-
+            for attempt in (1, 2):
+                try:
+                    process_name(driver, name, posted_date)
+                    break
+                except CaptchaBlockedError:
+                    raise
+                except WebDriverException as e:
+                    # The long-lived browser itself died mid-run (crash,
+                    # OOM, lost connection, etc) - confirmed live: a real
+                    # run against this exact site died this way partway
+                    # through and then silently no-op'd through every
+                    # remaining name with a dead session, still exiting 0
+                    # as if nothing was wrong. One retry with a brand new
+                    # browser rather than losing the rest of the run to it.
+                    print(f"Browser session error on '{name}' (attempt {attempt}/2): {e}")
+                    if attempt == 2:
+                        print(f"  Giving up on '{name}' after a fresh-browser retry.")
+                        break
                     try:
-                        time.sleep(random.uniform(1.0, 2.0))
-                        full_owner_name, street, city, state, zip_code = parse_account_detail(driver, account_num)
-                    except CaptchaBlockedError:
-                        raise
-                    except Exception as e:
-                        print(f"  Couldn't load account detail for {account_num}: {e}")
-                        continue
-
-                    if not street:
-                        print(f"  {account_num} ({owner_name}) has no mailing address on file - skipping.")
-                        continue
-
-                    if not city or not state or not zip_code:
-                        city, state, zip_code = geocode.geocode_address(driver, street, city or None)
-
-                    print(f"Match found for {name}: owner={full_owner_name or owner_name}, parcel={account_num}, address={street}")
-                    pipeline_db.add_match(
-                        name, full_owner_name or owner_name, account_num,
-                        street, city, state, zip_code, posted_date,
-                    )
-
-            except CaptchaBlockedError:
-                raise
-            except Exception as e:
-                print(f"Error during search for '{name}': {e}")
+                        driver.quit()
+                    except Exception:
+                        pass
+                    driver = create_driver()
+                except Exception as e:
+                    print(f"Error during search for '{name}': {e}")
+                    break
 
     except CaptchaBlockedError as e:
         print(f"\nSTOPPING: {e}")
