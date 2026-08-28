@@ -712,7 +712,7 @@ TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Probate Property Leads</title>
+<title>Data Lead Sell</title>
 <style>
   :root {
     --navy: #101d33;
@@ -1489,7 +1489,7 @@ TEMPLATE = """<!doctype html>
 <div class="login-screen" id="login-screen">
   <form class="login-card" id="login-form">
     <div class="mark"></div>
-    <h1>Probate Property Leads</h1>
+    <h1>Data Lead Sell</h1>
     <p class="sub">Sign in to view today&rsquo;s report</p>
     <label for="login-email">Email</label>
     <input type="email" id="login-email" autocomplete="username" required>
@@ -1564,7 +1564,7 @@ TEMPLATE = """<!doctype html>
     <div class="brand">
       <div class="mark"></div>
       <div>
-        <h1>Probate Property Leads</h1>
+        <h1>Data Lead Sell</h1>
         <p>__COUNTIES_SUBTITLE__ &middot; deceased-owner match report</p>
       </div>
     </div>
@@ -3095,7 +3095,7 @@ TERMS_HTML = f"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Terms of Service - Probate Property Leads</title>
+<title>Terms of Service - Data Lead Sell</title>
 <style>{LEGAL_PAGE_STYLE}</style>
 </head>
 <body>
@@ -3104,8 +3104,8 @@ TERMS_HTML = f"""<!doctype html>
   <h1>Terms of Service</h1>
   <div class="updated">Effective {LEGAL_EFFECTIVE_DATE}</div>
 
-  <p>These Terms of Service ("Terms") govern access to and use of the Probate
-  Property Leads platform (the "Service"), operated by {LEGAL_ENTITY_NAME}
+  <p>These Terms of Service ("Terms") govern access to and use of the Data
+  Lead Sell platform (the "Service"), operated by {LEGAL_ENTITY_NAME}
   ("we," "us," or "our"). By creating an account or subscribing to the
   Service, you agree to these Terms.</p>
 
@@ -3211,7 +3211,7 @@ PRIVACY_HTML = f"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy Policy - Probate Property Leads</title>
+<title>Privacy Policy - Data Lead Sell</title>
 <style>{LEGAL_PAGE_STYLE}</style>
 </head>
 <body>
@@ -3222,7 +3222,7 @@ PRIVACY_HTML = f"""<!doctype html>
 
   <p>This Privacy Policy explains how {LEGAL_ENTITY_NAME} ("we," "us," or
   "our") collects, uses, and shares information in connection with the
-  Probate Property Leads platform (the "Service").</p>
+  Data Lead Sell platform (the "Service").</p>
 
   <h2>1. Information We Collect</h2>
   <p>When you create an account, we collect your email address and the
@@ -3294,7 +3294,7 @@ CREATE_TEMPLATE_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Create PDF Template - Probate Property Leads</title>
+<title>Create PDF Template - Data Lead Sell</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -3570,7 +3570,7 @@ MAP_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Map - Probate Property Leads</title>
+<title>The Map - Data Lead Sell</title>
 <style>
   * { box-sizing: border-box; }
   body {
