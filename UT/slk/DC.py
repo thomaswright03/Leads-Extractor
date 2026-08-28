@@ -178,7 +178,14 @@ def _search_legacy_attempt(name):
         obituary_text = None
         obituary_url = None
 
-        # 3a. Some obituary pages have a button that leads to the full text on a new page
+        # 3a. Some obituary pages have a button that expands to the full
+        # text - click it if present, but don't let its absence (most
+        # obituaries don't have one) short-circuit past the xpath checks
+        # below. Confirmed live: that's exactly what was happening - a
+        # missing button raised out of this try block before the far more
+        # reliable "ObituaryText" class check ever ran, even on pages where
+        # that class was present the whole time and already held the full
+        # text with no button needed (e.g. Theodore Capener's obituary).
         try:
             def click_expand():
                 expand_button = WebDriverWait(driver, 5).until(
@@ -188,34 +195,38 @@ def _search_legacy_attempt(name):
                 expand_button.click()
 
             run_with_stale_retry(click_expand, retries=2, delay=0.3)
-
-            # 3aa. Obituary text (possibly multiple sections) on the new page.
-            # The "ObituaryText" component class is more stable than an absolute
-            # div-index path (a shift of one wrapper div breaks the latter, which
-            # is exactly what happened with the /div[2]/div[1] path below - the
-            # real text sits at /div[3]/div[1] on the live site), so try it first.
-            full_text_xpaths = [
-                "//div[contains(@class, 'ObituaryText')]",
-                "/html/body/div[1]/div[1]/div[4]/div[2]/div[3]/div[1]",
-                "/html/body/div[1]/div[1]/div[5]/div[2]/div[1]/div/div[1]/div/div[2]",
-            ]
-            for xpath in full_text_xpaths:
-                try:
-                    element = WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.XPATH, xpath))
-                    )
-                    text = element.text.strip()
-                    # Skip short boilerplate (e.g. a donation blurb) that some
-                    # of these paths can land on instead of the real obituary.
-                    if text and len(text) > 100:
-                        obituary_text = text
-                        obituary_url = driver.current_url
-                        break
-                except Exception:
-                    continue
-
         except Exception:
-            # 3b. No button - the obituary text is directly on the result page
+            pass
+
+        # 3aa. Obituary text (possibly multiple sections), whether or not an
+        # expand button was clicked above. The "ObituaryText" component
+        # class is more stable than an absolute div-index path (a shift of
+        # one wrapper div breaks the latter, which is exactly what happened
+        # with the /div[2]/div[1] path below - the real text sits at
+        # /div[3]/div[1] on the live site), so try it first.
+        full_text_xpaths = [
+            "//div[contains(@class, 'ObituaryText')]",
+            "/html/body/div[1]/div[1]/div[4]/div[2]/div[3]/div[1]",
+            "/html/body/div[1]/div[1]/div[5]/div[2]/div[1]/div/div[1]/div/div[2]",
+        ]
+        for xpath in full_text_xpaths:
+            try:
+                element = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, xpath))
+                )
+                text = element.text.strip()
+                # Skip short boilerplate (e.g. a donation blurb) that some
+                # of these paths can land on instead of the real obituary.
+                if text and len(text) > 100:
+                    obituary_text = text
+                    obituary_url = driver.current_url
+                    break
+            except Exception:
+                continue
+
+        # 3b. None of the above found it - try the older absolute path as a
+        # last resort.
+        if not obituary_text:
             try:
                 element = WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.XPATH,
@@ -239,6 +250,11 @@ def _search_legacy_attempt(name):
 # (middle initials), but that's exactly what extract_lone_initials() needs.
 STRIP_CHARS = '(),"\'.!?;'
 
+# Same set SLK$.py uses to strip a trailing generational suffix before
+# treating the last word as a last name - duplicated here for
+# _strip_nickname_and_suffix()'s use in middle_name_tokens().
+GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
 
 def extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
     """The owner record's >=4-char "extra" tokens (spouse name, middle
@@ -259,14 +275,58 @@ def extract_lone_initials(raw_owner_name):
     return sorted({w.lower() for w in cleaned.split() if len(w) == 1 and w.isalpha()})
 
 
+def _strip_nickname_and_suffix(name):
+    """Remove a parenthetical or quoted nickname/maiden name (wherever it
+    falls in the string) and a trailing generational suffix, so
+    middle_name_tokens() below isn't fooled into treating a nickname or the
+    real last name as a middle name. Confirmed live on real obituary-listing
+    names: "Theodore Capener (Ted)" was mis-deriving "Capener" (the actual
+    last name) as a middle name, and "Charles Chauncey Hall Jr." was
+    mis-deriving "Hall" as one, both because the trailing token pushed the
+    real last name into the [1:-1] middle slice below."""
+    name = re.sub(r'\([^)]*\)', ' ', name or "")
+    name = re.sub(r'"[^"]*"', ' ', name)
+    parts = name.split()
+    while parts and parts[-1].rstrip('.').lower() in GENERATIONAL_SUFFIXES:
+        parts = parts[:-1]
+    return ' '.join(parts)
+
+
 def middle_name_tokens(full_name):
     """The deceased's own name tokens other than the first and last word -
     e.g. 'Gregory' out of 'Jacob Gregory Banyai'. This is already known
     locally from the obituary listing itself, no Legacy.com search needed."""
-    parts = (full_name or "").split()
+    parts = _strip_nickname_and_suffix(full_name).split()
     if len(parts) <= 2:
         return []
     return parts[1:-1]
+
+
+def extract_fuller_name_from_obituary(obituary_text, known_full_name):
+    """The browse-page listing name (what SLKobi.py scrapes) is sometimes
+    missing a middle name that the actual obituary page has - confirmed
+    live: the listing had "Theodore Capener (Ted)" while the obituary
+    itself opens with "Theodore (Ted) Robert Capener". Legacy.com's
+    obituary pages open with the deceased's fuller printed name on its own
+    line, before the birth-death year range, so pull that line (only if it
+    shares a word with the name we already know, as a sanity check against
+    grabbing an unrelated line) for a second, better-informed middle-name
+    check."""
+    if not obituary_text:
+        return None
+    known_tokens = {w.lower() for w in re.sub(r'[()"]', ' ', known_full_name or "").split()}
+    for line in obituary_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Only the very first non-empty line is ever a candidate - it's the
+        # name line every time this succeeds, and checking further lines
+        # risks matching an unrelated sentence that happens to share a word.
+        line_tokens = {w.lower() for w in re.sub(r'[()"]', ' ', line).split()}
+        if len(line) < 80 and known_tokens & line_tokens:
+            return line
+        return None
+    return None
 
 
 def check_initial_vs_own_name(owner_name, full_name):
@@ -283,19 +343,6 @@ def check_initial_vs_own_name(owner_name, full_name):
         if lower_word and lower_word[0] in lone_initials:
             return lower_word[0], word
     return None
-
-
-def has_anything_to_check(cleaned_full_name, cleaned_owner_name):
-    """Whether there's a >=4-char keyword worth searching the obituary
-    text for. A lone initial alone isn't a reason to search - that's
-    already been checked against the deceased's own known name before this
-    point (see check_initial_vs_own_name); if it didn't match there, there
-    is nothing left an obituary search could confirm from it. (Matching a
-    lone initial against arbitrary capitalized words in the full obituary
-    article - not just the deceased's own name - was tried and produced
-    garbage hits like "R matches 'Rally'" or "M matches 'Memory'", so that
-    path was removed rather than kept as a fallback.)"""
-    return bool(extract_keyword_candidates(cleaned_full_name, cleaned_owner_name))
 
 
 def confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text):
@@ -323,50 +370,8 @@ if __name__ == "__main__":
         confirmed_rows = []
 
         for match_id, full_name, owner_name, parcel_id, cleaned_full_name, cleaned_owner_name, posted_date, address, city, state, zip_code in matches:
-            # Cheapest check first, before any Legacy.com search: does the
-            # assessor record's lone initial just match the deceased's own
-            # already-known middle name? If so, that's confirmed on its own
-            # - no need to spend a search on it.
-            own_name_hit = check_initial_vs_own_name(owner_name, full_name)
-            if own_name_hit:
-                initial, hit_word = own_name_hit
-                reason = f"initial {initial.upper()} matches deceased's own name '{hit_word}'"
+            def confirm(reason, obituary_url=""):
                 pipeline_db.set_match_confirmation(match_id, True, reason)
-                print(f"Confirmed: {full_name} / owner '{owner_name}' — found: {reason} (no Legacy.com search needed)")
-                row = {
-                    "Full Name": full_name,
-                    "Owner Name": owner_name,
-                    "Parcel ID": parcel_id,
-                    "Address": address or "",
-                    "City": city or "",
-                    "State": state or "",
-                    "Zip": zip_code or "",
-                    "Matched Keywords": reason,
-                    "Obituary URL": pipeline_db.get_obituary_url(full_name) or "",
-                }
-                if mode == "weekly":
-                    row["Posted Date"] = posted_date or ""
-                confirmed_rows.append(row)
-                continue
-
-            if not has_anything_to_check(cleaned_full_name, cleaned_owner_name):
-                print(f"Skipping obituary search for '{full_name}' / owner '{owner_name}' — no keyword to check against.")
-                pipeline_db.set_match_confirmation(match_id, False, "")
-                print(f"Not confirmed: {full_name} / owner '{owner_name}' — nothing to check against the obituary")
-                continue
-
-            if full_name not in obituary_cache:
-                text, url = search_legacy(full_name)
-                obituary_cache[full_name] = (text or "", url)
-                pipeline_db.set_obituary_url(full_name, url)
-
-            obituary_text, obituary_url = obituary_cache[full_name]
-            matched_keywords = confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text)
-            reason = ", ".join(matched_keywords)
-
-            pipeline_db.set_match_confirmation(match_id, bool(reason), reason)
-
-            if reason:
                 print(f"Confirmed: {full_name} / owner '{owner_name}' — found: {reason}")
                 row = {
                     "Full Name": full_name,
@@ -382,6 +387,62 @@ if __name__ == "__main__":
                 if mode == "weekly":
                     row["Posted Date"] = posted_date or ""
                 confirmed_rows.append(row)
+
+            # Cheapest check first, before any Legacy.com search: does the
+            # assessor record's lone initial just match the deceased's own
+            # already-known middle name? If so, that's confirmed on its own
+            # - no need to spend a search on it.
+            own_name_hit = check_initial_vs_own_name(owner_name, full_name)
+            if own_name_hit:
+                initial, hit_word = own_name_hit
+                confirm(
+                    f"initial {initial.upper()} matches deceased's own name '{hit_word}' (no Legacy.com search needed)",
+                    pipeline_db.get_obituary_url(full_name) or "",
+                )
+                continue
+
+            lone_initials = extract_lone_initials(owner_name)
+            keyword_candidates = extract_keyword_candidates(cleaned_full_name, cleaned_owner_name)
+
+            if not lone_initials and not keyword_candidates:
+                print(f"Skipping obituary search for '{full_name}' / owner '{owner_name}' — no keyword to check against.")
+                pipeline_db.set_match_confirmation(match_id, False, "")
+                print(f"Not confirmed: {full_name} / owner '{owner_name}' — nothing to check against the obituary")
+                continue
+
+            if full_name not in obituary_cache:
+                text, url = search_legacy(full_name)
+                obituary_cache[full_name] = (text or "", url)
+                pipeline_db.set_obituary_url(full_name, url)
+
+            obituary_text, obituary_url = obituary_cache[full_name]
+
+            # The browse-page listing name can be missing a middle name that
+            # the actual obituary page has - confirmed live: the listing had
+            # "Theodore Capener (Ted)" while the obituary itself opens with
+            # "Theodore (Ted) Robert Capener", so "THEODORE R" in the county
+            # record went unconfirmed even though "R" is really his own
+            # middle initial. Retry the middle-initial check against that
+            # fuller name before falling back to the spouse/keyword check.
+            if lone_initials:
+                fuller_name = extract_fuller_name_from_obituary(obituary_text, full_name)
+                if fuller_name:
+                    retry_hit = check_initial_vs_own_name(owner_name, fuller_name)
+                    if retry_hit:
+                        initial, hit_word = retry_hit
+                        confirm(
+                            f"initial {initial.upper()} matches deceased's own name '{hit_word}' (from obituary: \"{fuller_name}\")",
+                            obituary_url,
+                        )
+                        continue
+
+            matched_keywords = confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text)
+            reason = ", ".join(matched_keywords)
+
+            pipeline_db.set_match_confirmation(match_id, bool(reason), reason)
+
+            if reason:
+                confirm(reason, obituary_url)
             else:
                 print(f"Not confirmed: {full_name} / owner '{owner_name}' — no corroborating keyword or initial found in obituary")
 
