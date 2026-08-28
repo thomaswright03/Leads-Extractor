@@ -69,6 +69,7 @@ COUNTY_FOLDER_TO_FIPS = {
     "pim": "04019",  # Pima County, AZ
     "gil": "04007",  # Gila County, AZ
     "yum": "04027",  # Yuma County, AZ
+    "yav": "04025",  # Yavapai County, AZ
 }
 
 # The Map only knows FIPS codes (they come from the public us-atlas
@@ -558,6 +559,19 @@ COUNTIES = [
         # two: an unauthenticated visitor still gets bounced to a login
         # page first).
         "parcel_url_base": "https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/account.jsp?accountNum=",
+    },
+    {
+        "folder": "yav",
+        "path": "../AZ/yav",
+        "label": "Yavapai County",
+        "state": "AZ",
+        # Yavapai runs a completely different platform from every other AZ
+        # county here - a plain, unauthenticated ASP.NET/Kendo Treasurer
+        # site ("Pinal & Yavapai IGA"), not Tyler EagleWeb. Its Tax Summary
+        # page is a real, stable, bookmarkable, stateless deep link (a
+        # plain ?parcelnumber= query param, confirmed live) - no login wall
+        # at all, unlike Gila/Yuma/Apache's identical Tyler deployments.
+        "parcel_url_base": "https://taxinquiry.yavapaiaz.gov/Parcel/TaxSummary?parcelnumber=",
     },
 ]
 
