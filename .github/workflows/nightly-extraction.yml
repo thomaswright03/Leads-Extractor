@@ -51,55 +51,75 @@ jobs:
 
       - name: Run Salt Lake County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'slk'
+        # continue-on-error on every county step below: without it, GitHub
+        # Actions' default behavior is that one failing step stops the whole
+        # job immediately and skips everything after it - including the
+        # single combined "Commit and push new leads" step at the end. That
+        # would mean one bad county (confirmed live: Pima's network block,
+        # Gila's CAPTCHA wall) silently blocks every OTHER county's
+        # already-successful results from ever reaching the live site, not
+        # just its own. A failed step still shows a warning in the Actions
+        # UI - it just doesn't take the rest of the run down with it.
+        continue-on-error: true
         working-directory: UT/slk
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Utah County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'uta'
+        continue-on-error: true
         working-directory: UT/uta
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Maricopa County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'mar'
+        continue-on-error: true
         working-directory: AZ/mar
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Apache County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'apa'
+        continue-on-error: true
         working-directory: AZ/apa
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Greenlee County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gre'
+        continue-on-error: true
         working-directory: AZ/gre
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Graham County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gra'
+        continue-on-error: true
         working-directory: AZ/gra
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Pima County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'pim'
+        continue-on-error: true
         working-directory: AZ/pim
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Gila County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gil'
+        continue-on-error: true
         working-directory: AZ/gil
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Yuma County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'yum'
+        continue-on-error: true
         working-directory: AZ/yum
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Yavapai County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'yav'
+        continue-on-error: true
         working-directory: AZ/yav
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Commit and push new leads
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
