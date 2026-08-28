@@ -67,6 +67,7 @@ COUNTY_FOLDER_TO_FIPS = {
     "gre": "04011",  # Greenlee County, AZ
     "gra": "04009",  # Graham County, AZ
     "pim": "04019",  # Pima County, AZ
+    "gil": "04007",  # Gila County, AZ
 }
 
 # The Map only knows FIPS codes (they come from the public us-atlas
@@ -529,6 +530,21 @@ COUNTIES = [
         # differently, so this just lands an admin on the homepage rather
         # than a real deep link to the specific parcel.
         "parcel_url_base": "https://www.asr.pima.gov/",
+    },
+    {
+        "folder": "gil",
+        "path": "../AZ/gil",
+        "label": "Gila County",
+        "state": "AZ",
+        # Gila runs the same Tyler Technologies EagleWeb/TaxWeb platform as
+        # Apache County, and unlike every other AZ county here its
+        # account.jsp?accountNum=<id> links are real, stable, bookmarkable
+        # URLs (confirmed live) - not session-scoped like Greenlee/Graham's
+        # RealWare GUIDs or Pima's sessionStorage-based viewer. A visitor
+        # without an active guest session still gets bounced to a login
+        # page first either way (same as Apache's identical setup), but
+        # this is a real deep link to the specific parcel once logged in.
+        "parcel_url_base": "https://gilacountyaz-assessor.tylerhost.net/assessor/taxweb/account.jsp?accountNum=",
     },
 ]
 
