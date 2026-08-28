@@ -1490,7 +1490,10 @@ TEMPLATE = """<!doctype html>
     </div>
 
     <label style="margin-top:22px;">Choose a Plan</label>
+    <p class="sub" id="signup-plans-state-note" style="display:none; margin:0 0 8px; text-align:left;"></p>
+    <input type="text" id="signup-plan-search" placeholder="Search counties&hellip;" style="margin-bottom:10px;">
     <div id="signup-plans"></div>
+    <p class="sub" id="signup-plans-empty" style="display:none; text-align:left;">No counties match &mdash; try a different search.</p>
 
     <label style="display:flex; align-items:flex-start; gap:8px; margin-top:18px; font-weight:normal;">
       <input type="checkbox" id="signup-agree-terms" required style="margin-top:3px;">
@@ -2604,6 +2607,10 @@ TEMPLATE = """<!doctype html>
   const signupForm = document.getElementById('signup-form');
   const signupError = document.getElementById('signup-error');
   const signupPlansDiv = document.getElementById('signup-plans');
+  const signupPlanSearch = document.getElementById('signup-plan-search');
+  const signupPlansStateNote = document.getElementById('signup-plans-state-note');
+  const signupPlansEmpty = document.getElementById('signup-plans-empty');
+  const signupFromState = document.getElementById('signup-from-state');
   const showSignupLink = document.getElementById('show-signup-link');
   const showLoginLink = document.getElementById('show-login-link');
 
@@ -2618,32 +2625,66 @@ TEMPLATE = """<!doctype html>
     loginForm.style.display = 'block';
   });
 
-  let firstAvailableChecked = false;
-  (leadData.pricingPlans || []).forEach((plan) => {
-    const option = document.createElement('label');
-    option.className = 'plan-option' + (plan.taken ? ' is-taken' : '');
-    const radio = document.createElement('input');
-    radio.type = 'radio';
-    radio.name = 'signup-plan';
-    radio.value = `${plan.kind}:${plan.key}`;
-    radio.disabled = !!plan.taken;
-    if (!plan.taken && !firstAvailableChecked) {
-      radio.checked = true;
-      firstAvailableChecked = true;
+  // The return-address State field is filled in before a plan is chosen
+  // (it's earlier on the same form) - once it holds a real 2-letter state
+  // that a county plan actually exists in, narrow the list to that state
+  // rather than making someone scroll every county in the country to find
+  // theirs. The search box narrows further on top of that (or on its own,
+  // with no state typed yet) - both filters just AND together.
+  const PLAN_STATES = new Set((leadData.pricingPlans || []).map((p) => p.state).filter(Boolean));
+
+  function renderSignupPlans() {
+    const stateVal = signupFromState.value.trim().toUpperCase();
+    const searchVal = signupPlanSearch.value.trim().toLowerCase();
+    const stateFilterActive = stateVal.length === 2 && PLAN_STATES.has(stateVal);
+
+    let plans = leadData.pricingPlans || [];
+    if (stateFilterActive) plans = plans.filter((p) => p.state === stateVal);
+    if (searchVal) plans = plans.filter((p) => p.label.toLowerCase().includes(searchVal));
+
+    signupPlansStateNote.style.display = stateFilterActive ? 'block' : 'none';
+    if (stateFilterActive) signupPlansStateNote.textContent = `Showing ${stateVal} counties`;
+
+    // Keep whatever was already selected if it's still in the filtered
+    // list - re-rendering on every keystroke shouldn't silently swap the
+    // agent's choice out from under them.
+    const previouslyChecked = signupPlansDiv.querySelector('input[name="signup-plan"]:checked');
+    const previousValue = previouslyChecked ? previouslyChecked.value : null;
+
+    signupPlansDiv.innerHTML = '';
+    plans.forEach((plan) => {
+      const option = document.createElement('label');
+      option.className = 'plan-option' + (plan.taken ? ' is-taken' : '');
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'signup-plan';
+      radio.value = `${plan.kind}:${plan.key}`;
+      radio.disabled = !!plan.taken;
+      if (radio.value === previousValue && !plan.taken) radio.checked = true;
+      option.appendChild(radio);
+      option.appendChild(el('span', 'plan-label', plan.label));
+      // No price shown here on purpose - Adam sometimes closes a county
+      // above its listed price (see The Map's price editor), so a number
+      // quoted on this public form could go stale the moment that happens.
+      // Checkout still charges whatever the plan's current price actually
+      // is (see billing.create_checkout_session) - this just stops the
+      // signup page from advertising a number that might not be it.
+      if (plan.taken) {
+        option.appendChild(el('span', 'badge taken', 'Taken'));
+      }
+      signupPlansDiv.appendChild(option);
+    });
+
+    if (!signupPlansDiv.querySelector('input[name="signup-plan"]:checked')) {
+      const firstAvailable = signupPlansDiv.querySelector('input[name="signup-plan"]:not(:disabled)');
+      if (firstAvailable) firstAvailable.checked = true;
     }
-    option.appendChild(radio);
-    option.appendChild(el('span', 'plan-label', plan.label));
-    // No price shown here on purpose - Adam sometimes closes a county
-    // above its listed price (see The Map's price editor), so a number
-    // quoted on this public form could go stale the moment that happens.
-    // Checkout still charges whatever the plan's current price actually
-    // is (see billing.create_checkout_session) - this just stops the
-    // signup page from advertising a number that might not be it.
-    if (plan.taken) {
-      option.appendChild(el('span', 'badge taken', 'Taken'));
-    }
-    signupPlansDiv.appendChild(option);
-  });
+    signupPlansEmpty.style.display = plans.length === 0 ? 'block' : 'none';
+  }
+
+  renderSignupPlans();
+  signupFromState.addEventListener('input', renderSignupPlans);
+  signupPlanSearch.addEventListener('input', renderSignupPlans);
 
   signupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -2761,9 +2802,15 @@ def build_dashboard_html(authenticated=False, email=None):
     # - showing the full footprint of counties is a deliberate marketing
     # choice, not just what's currently purchasable.
     taken_counties = pipeline_db.get_taken_counties()
+    # Keyed off the full COUNTIES list (not visible_counties, which is
+    # auth-filtered) since signup itself is shown to logged-out visitors -
+    # this is just how the signup form knows which state each plan
+    # belongs to, for its state/search filtering.
+    county_state_by_folder = {c["folder"]: c["state"] for c in COUNTIES}
     pricing_plans = [
         {
             "kind": p["kind"], "key": p["key"], "label": p["label"], "priceCents": p["monthly_price_cents"],
+            "state": county_state_by_folder.get(p["key"], ""),
             "taken": p["key"] in taken_counties,
         }
         for p in pipeline_db.get_pricing_plans()
