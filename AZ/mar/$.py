@@ -63,7 +63,14 @@ def create_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     chrome_major = detect_chrome_major_version()
-    return uc.Chrome(options=options, version_main=chrome_major) if chrome_major else uc.Chrome(options=options)
+    driver = uc.Chrome(options=options, version_main=chrome_major) if chrome_major else uc.Chrome(options=options)
+    # undetected_chromedriver swaps out its initial blank tab as part of its
+    # own startup patching - calling .get() before that settles can raise
+    # NoSuchWindowException ("target window already closed"), confirmed
+    # live. Switching to whatever window handle is actually live avoids it
+    # (same fix UT/uta's equivalent script already uses).
+    driver.switch_to.window(driver.window_handles[-1])
+    return driver
 
 
 GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}

@@ -150,6 +150,12 @@ for index, (name, posted_date) in enumerate(names_with_dates):
     # with every other driver-creating script in this pipeline.
     chrome_major = detect_chrome_major_version()
     driver = uc.Chrome(options=options, version_main=chrome_major) if chrome_major else uc.Chrome(options=options)
+    # undetected_chromedriver swaps out its initial blank tab as part of its
+    # own startup patching - calling .get() before that settles can raise
+    # NoSuchWindowException ("target window already closed"), confirmed
+    # live. Switching to whatever window handle is actually live avoids it
+    # (same fix UT/uta's equivalent script already uses).
+    driver.switch_to.window(driver.window_handles[-1])
 
     try:
         _log(f"Searching for last name: {last_name}")

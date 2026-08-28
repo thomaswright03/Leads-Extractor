@@ -23,6 +23,10 @@ options = uc.ChromeOptions()
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 driver = uc.Chrome(options=options)
+# undetected_chromedriver swaps out its initial blank tab as part of its own
+# startup patching - calling .get() before that settles can raise
+# NoSuchWindowException ("target window already closed"), confirmed live.
+driver.switch_to.window(driver.window_handles[-1])
 
 try:
     driver.get("https://www.saltlakecounty.gov/assessor/")

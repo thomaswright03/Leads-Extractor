@@ -60,6 +60,12 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 # Initialize the Chrome driver
 _chrome_major = detect_chrome_major_version()
 driver = uc.Chrome(options=chrome_options, version_main=_chrome_major) if _chrome_major else uc.Chrome(options=chrome_options)
+# undetected_chromedriver swaps out its initial blank tab as part of its
+# own startup patching - calling .get() before that settles can raise
+# NoSuchWindowException ("target window already closed"), confirmed live.
+# Switching to whatever window handle is actually live avoids it (same fix
+# UT/uta's equivalent script already uses).
+driver.switch_to.window(driver.window_handles[-1])
 
 # Legacy.com's own county-level browse page - the same URL pattern works for
 # every county in the country (.../local/<state>/<county>-county), with the
