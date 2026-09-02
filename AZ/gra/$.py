@@ -2,6 +2,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -72,6 +73,29 @@ def create_driver():
     # (same fix UT/uta's equivalent script already uses).
     driver.switch_to.window(driver.window_handles[-1])
     return driver
+
+
+# Confirmed live in CI: consecutive per-name browser launches went
+# completely silent (no match, no "no results", no error at all) right
+# after an earlier name's search crashed - stdout's default block buffering
+# was delaying/losing whatever real error was happening, and a fresh
+# uc.Chrome() launch right after a crash can fail transiently while the
+# previous session's resources are still being torn down. Unbuffered output
+# plus a retry on driver creation turns that silence into a real, visible
+# error instead.
+sys.stdout.reconfigure(line_buffering=True)
+
+
+def new_driver_with_retries(max_attempts=3):
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return create_driver()
+        except Exception as e:
+            last_error = e
+            print(f"  create_driver() failed (attempt {attempt}/{max_attempts}): {type(e).__name__}: {e}")
+            time.sleep(2)
+    raise last_error
 
 
 GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
@@ -273,7 +297,12 @@ if __name__ == "__main__":
     # here - simpler than reusing one session across every search, and a
     # crashed/stuck browser only costs one name instead of the whole run.
     for name, posted_date in names_with_dates:
-        driver = create_driver()
+        try:
+            driver = new_driver_with_retries()
+        except Exception as e:
+            print(f"Error during search for '{name}': couldn't start a browser after retries: {type(e).__name__}: {e}")
+            continue
+
         try:
             last_name = extract_last_name(name)
             first_name = extract_first_name(name)
@@ -320,8 +349,11 @@ if __name__ == "__main__":
                 )
 
         except Exception as e:
-            print(f"Error during search for '{name}': {e}")
+            print(f"Error during search for '{name}': {type(e).__name__}: {e}")
         finally:
-            driver.quit()
+            try:
+                driver.quit()
+            except Exception:
+                pass
 
     print("Done.")
