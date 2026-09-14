@@ -711,6 +711,9 @@ TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --navy: #101d33;
@@ -739,7 +742,7 @@ TEMPLATE = """<!doctype html>
   ::selection { background: var(--gold-light); color: #2a1f04; }
   body {
     margin: 0;
-    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     background:
       radial-gradient(1100px 480px at 12% -10%, rgba(166,130,46,0.06), transparent 60%),
       var(--cream);
@@ -968,7 +971,7 @@ TEMPLATE = """<!doctype html>
   button.ghost:active { transform: translateY(0); }
   button.ghost:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   thead th {
     text-align: left;
     font-size: 11px;
@@ -3048,7 +3051,7 @@ LEGAL_PAGE_STYLE = """
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     background: #faf7f1;
     color: #232c3b;
     line-height: 1.6;
@@ -3083,6 +3086,9 @@ TERMS_HTML = f"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Terms of Service - Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>{LEGAL_PAGE_STYLE}</style>
 </head>
 <body>
@@ -3199,6 +3205,9 @@ PRIVACY_HTML = f"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy - Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>{LEGAL_PAGE_STYLE}</style>
 </head>
 <body>
@@ -3282,11 +3291,14 @@ CREATE_TEMPLATE_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Create PDF Template - Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     background: #faf7f1;
     color: #232c3b;
   }
@@ -3558,11 +3570,14 @@ MAP_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Map - Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     background: #faf7f1;
     color: #232c3b;
   }

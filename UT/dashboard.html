@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --navy: #101d33;
@@ -32,7 +35,7 @@
   ::selection { background: var(--gold-light); color: #2a1f04; }
   body {
     margin: 0;
-    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
     background:
       radial-gradient(1100px 480px at 12% -10%, rgba(166,130,46,0.06), transparent 60%),
       var(--cream);
@@ -265,7 +268,7 @@
   button.ghost:active { transform: translateY(0); }
   button.ghost:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   thead th {
     text-align: left;
     font-size: 11px;
