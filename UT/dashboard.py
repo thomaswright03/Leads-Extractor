@@ -4063,13 +4063,34 @@ MAP_HTML = """<!doctype html>
     }
   });
 
+  async function fetchStatusMap() {
+    const resp = await fetch('/api/map/status');
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    return resp.json();
+  }
+
   async function init() {
-    const [topoResp, statusResp] = await Promise.all([
-      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json'),
-      fetch('/api/map/status'),
+    const [us, statusMapResult] = await Promise.all([
+      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json').then((r) => r.json()),
+      // A failed load here used to silently fall back to an empty {},
+      // which renders every county - including real, already-configured
+      // ones - as "not started" with zero indication anything went wrong.
+      // That looked exactly like "my status changes don't save": the
+      // change itself had gone through fine, but the *next* page load hit
+      // this same silent failure and threw the correct data away client-
+      // side, on top of the never-actually-lost data still sitting in
+      // Supabase. One retry before giving up, since this has been seen to
+      // fail transiently on the very first request after the server's
+      // been idle, then succeed immediately after.
+      (async () => {
+        try {
+          return await fetchStatusMap();
+        } catch (e) {
+          return await fetchStatusMap();
+        }
+      })(),
     ]);
-    const us = await topoResp.json();
-    statusMap = statusResp.ok ? await statusResp.json() : {};
+    statusMap = statusMapResult;
 
     statesFeatures = topojson.feature(us, us.objects.states).features;
     countiesFeatures = topojson.feature(us, us.objects.counties).features;
@@ -4282,7 +4303,11 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send_json(400, {"error": "Invalid JSON body"})
                 return
-            status, response = handle_set_county_status(payload, restrict_to_marking_sold=is_map_only(email))
+            try:
+                status, response = handle_set_county_status(payload, restrict_to_marking_sold=is_map_only(email))
+            except Exception as e:
+                print(f"Unexpected error setting county status: {e}")
+                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
             self._send_json(status, response)
             return
 
