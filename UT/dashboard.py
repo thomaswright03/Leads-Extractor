@@ -154,8 +154,6 @@ LETTER_TEMPLATES = [
     },
 ]
 
-LETTER_TEMPLATES_BY_ID = {t["id"]: t for t in LETTER_TEMPLATES}
-
 
 def build_letter_html(message):
     """Wraps the (already merge-field-substituted) letter body in a minimal
@@ -1017,16 +1015,6 @@ TEMPLATE = """<!doctype html>
   }
   .name-cell .deceased { font-weight: 600; color: var(--heading); }
   .name-cell .owner { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
-  .chip {
-    display: inline-block;
-    background: var(--gold-light);
-    color: #5a4409;
-    border-radius: 999px;
-    padding: 2px 10px;
-    font-size: 11.5px;
-    margin: 1px 3px 1px 0;
-    font-weight: 700;
-  }
   .badge {
     display: inline-flex;
     align-items: center;
@@ -1057,7 +1045,6 @@ TEMPLATE = """<!doctype html>
     padding-bottom: 1px;
   }
   a.link:hover { color: var(--gold-deep); border-color: var(--gold-deep); }
-  .links-cell { display: flex; flex-direction: column; gap: 4px; }
   .mailed-cell {
     display: flex;
     align-items: center;
