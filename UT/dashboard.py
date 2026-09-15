@@ -158,13 +158,23 @@ LETTER_TEMPLATES = [
 def build_letter_html(message):
     """Wraps the (already merge-field-substituted) letter body in a minimal
     HTML page for Lob's `file` field. Lob renders supplied HTML to the
-    letter's printed page size."""
+    letter's printed page size.
+
+    Top margin is 3in, not a normal ~0.75in - confirmed live (a real test
+    letter came back with the first few inches of every line blanked out)
+    and confirmed against Lob's own official template
+    (github.com/lob/examples/letters/8.5x11-letter.html): Lob prints an
+    opaque white box over the region roughly x:0.6-3.75in, y:0.84-2.84in
+    on page 1 to hold the return address, recipient address, and postal
+    barcode, painted on top of whatever content is already there. A normal
+    margin puts body text right under that box; 3in of top margin clears
+    it with some room to spare."""
     paragraphs = "".join(
         f"<p>{html.escape(line)}</p>" for line in message.split("\n\n") if line.strip()
     )
     return f"""<html>
 <head><meta charset="utf-8"><style>
-  body {{ font-family: Georgia, 'Times New Roman', serif; font-size: 12pt; color: #111; margin: 0.75in; }}
+  body {{ font-family: Georgia, 'Times New Roman', serif; font-size: 12pt; color: #111; margin: 3in 1in 1in 1in; }}
   p {{ margin: 0 0 1em; white-space: pre-wrap; }}
 </style></head>
 <body>{paragraphs}</body>
