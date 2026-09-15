@@ -715,6 +715,61 @@ def load_all_confirmed_leads(counties):
     return leads
 
 
+def compute_daily_lead_stats(confirmed_leads):
+    """Confirmed-lead counts per day, broken out per county, newest day
+    first. Built straight from the same already-loaded, already
+    access-filtered confirmed_leads list load_all_confirmed_leads()
+    returns - not a separate query - so the per-county columns and the
+    same-day "Total" (their sum) can never drift apart or leak a county
+    the requesting user can't see. Keyed by dateAddedRaw
+    (YYYY-MM-DD), the date a lead was *last* confirmed on (see
+    load_confirmed_leads_from_excel's dedup) - a lead re-confirmed on a
+    later date counts against that later day, not the day it first
+    appeared."""
+    by_date = {}
+    for lead in confirmed_leads:
+        date_str = lead["dateAddedRaw"]
+        if not date_str:
+            continue
+        day_counts = by_date.setdefault(date_str, {})
+        folder = lead["countyFolder"]
+        day_counts[folder] = day_counts.get(folder, 0) + 1
+    return [
+        {"date": date_str, "byCounty": counts, "total": sum(counts.values())}
+        for date_str, counts in sorted(by_date.items(), reverse=True)
+    ]
+
+
+def build_stats_table_html(visible_counties, daily_stats):
+    """Plain server-rendered <table> markup for the Stats page - no client
+    JS needed, unlike Confirmed Leads, since this table has no
+    sort/filter/search."""
+    if not visible_counties:
+        return '<p class="sub" style="margin:0; padding:20px;">Your account doesn&rsquo;t have access to any counties yet.</p>'
+    if not daily_stats:
+        return '<p class="sub" style="margin:0; padding:20px;">No confirmed leads recorded yet.</p>'
+
+    county_cols = sorted(visible_counties, key=lambda c: c["label"])
+    header_cells = "".join(f"<th>{html.escape(c['label'])}</th>" for c in county_cols)
+
+    rows_html = []
+    for day in daily_stats:
+        cells = []
+        for c in county_cols:
+            count = day["byCounty"].get(c["folder"], 0)
+            cells.append(f'<td class="{"zero" if not count else ""}">{count}</td>')
+        rows_html.append(
+            f'<tr><td>{format_date_added(day["date"], fmt="%Y-%m-%d")}</td>'
+            f'{"".join(cells)}<td class="total-cell">{day["total"]}</td></tr>'
+        )
+
+    return (
+        "<table><thead><tr><th>Date</th>"
+        f'{header_cells}<th class="total-col">Total</th></tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
 TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
@@ -1571,6 +1626,7 @@ TEMPLATE = """<!doctype html>
     <div class="generated">
       Generated __GENERATED_AT__
       <span style="margin-left:10px;">__USER_EMAIL__</span>
+      <a href="/stats" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline;">Stats</a>
       __MAP_LINK__
       <a href="#" id="logout-link" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline; cursor: pointer;">Log Out</a>
     </div>
@@ -4122,6 +4178,67 @@ MAP_HTML = """<!doctype html>
 </html>
 """
 
+STATS_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stats - Data Lead Sell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #faf7f1;
+    color: #232c3b;
+  }
+  header.top {
+    background: linear-gradient(135deg, #0a1424, #101d33 55%, #24354f);
+    color: #fff;
+    padding: 22px 32px;
+  }
+  header.top a { color: #ecce8a; font-size: 13.5px; text-decoration: none; }
+  header.top h1 { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 24px; margin: 8px 0 0; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 80px; }
+  .sub { color: #707b8d; font-size: 13.5px; margin: 0 0 16px; }
+  .table-card {
+    background: #fff; border: 1px solid #e9e2d2; border-radius: 14px;
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th, td { padding: 10px 16px; text-align: right; font-size: 13.5px; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+    color: #707b8d; border-bottom: 1.5px solid #e9e2d2; position: sticky; top: 0; background: #fff;
+  }
+  tbody tr:not(:last-child) td { border-bottom: 1px solid #f2ece0; }
+  tbody tr:hover td { background: #faf7f1; }
+  td.zero { color: #b9c0cc; }
+  th.total-col, td.total-cell { font-weight: 700; color: #16233a; border-left: 1.5px solid #e9e2d2; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a href="/">&larr; Back to Dashboard</a>
+  <h1>Stats</h1>
+</header>
+
+<div class="wrap">
+  <p class="sub">Confirmed leads found per day, by county. Total is the same-day sum across every county you have access to.</p>
+  <div class="table-card">
+    __STATS_TABLE_HTML__
+  </div>
+</div>
+
+</body>
+</html>
+"""
+
 
 class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -4150,6 +4267,24 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             body = CREATE_TEMPLATE_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path == "/stats":
+            email = get_session_email(self)
+            if not email:
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.end_headers()
+                return
+            visible_counties = [c for c in COUNTIES if c["folder"] in get_allowed_county_folders(email)]
+            daily_stats = compute_daily_lead_stats(load_all_confirmed_leads(visible_counties))
+            page = STATS_HTML.replace("__STATS_TABLE_HTML__", build_stats_table_html(visible_counties, daily_stats))
+            body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
