@@ -740,35 +740,6 @@ def compute_daily_lead_stats(confirmed_leads):
     ]
 
 
-def build_stats_table_html(visible_counties, daily_stats):
-    """Plain server-rendered <table> markup for the Stats page - no client
-    JS needed, unlike Confirmed Leads, since this table has no
-    sort/filter/search."""
-    if not visible_counties:
-        return '<p class="sub" style="margin:0; padding:20px;">Your account doesn&rsquo;t have access to any counties yet.</p>'
-    if not daily_stats:
-        return '<p class="sub" style="margin:0; padding:20px;">No confirmed leads recorded yet.</p>'
-
-    county_cols = sorted(visible_counties, key=lambda c: c["label"])
-    header_cells = "".join(f"<th>{html.escape(c['label'])}</th>" for c in county_cols)
-
-    rows_html = []
-    for day in daily_stats:
-        cells = []
-        for c in county_cols:
-            count = day["byCounty"].get(c["folder"], 0)
-            cells.append(f'<td class="{"zero" if not count else ""}">{count}</td>')
-        rows_html.append(
-            f'<tr><td>{format_date_added(day["date"], fmt="%Y-%m-%d")}</td>'
-            f'{"".join(cells)}<td class="total-cell">{day["total"]}</td></tr>'
-        )
-
-    return (
-        "<table><thead><tr><th>Date</th>"
-        f'{header_cells}<th class="total-col">Total</th></tr></thead>'
-        f'<tbody>{"".join(rows_html)}</tbody></table>'
-    )
-
 
 TEMPLATE = """<!doctype html>
 <html lang="en">
@@ -4204,10 +4175,34 @@ STATS_HTML = """<!doctype html>
   header.top h1 { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 24px; margin: 8px 0 0; }
   .wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 80px; }
   .sub { color: #707b8d; font-size: 13.5px; margin: 0 0 16px; }
-  .table-card {
-    background: #fff; border: 1px solid #e9e2d2; border-radius: 14px;
-    overflow-x: auto;
+
+  .filters {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; margin-bottom: 20px;
   }
+  #county-filters { display: flex; gap: 14px; flex-wrap: wrap; }
+  .county-filter-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; }
+  .county-filter-item input { accent-color: #a6822e; cursor: pointer; }
+  .county-swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+  #days-filter {
+    font-family: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px;
+    border: 1.5px solid #e9e2d2; background: #fff; color: #232c3b; cursor: pointer;
+  }
+
+  .chart-card, .table-card {
+    background: #fff; border: 1px solid #e9e2d2; border-radius: 14px; overflow-x: auto;
+  }
+  .chart-card { padding: 24px 20px 14px; margin-bottom: 24px; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; min-width: max-content; }
+  .bar-col { display: flex; flex-direction: column; align-items: center; width: 30px; flex-shrink: 0; }
+  .bar-total { font-size: 10.5px; color: #707b8d; margin-bottom: 4px; font-variant-numeric: tabular-nums; height: 13px; }
+  .bar-stack {
+    width: 18px; height: 150px; display: flex; flex-direction: column-reverse;
+    border-radius: 3px 3px 0 0; overflow: hidden; background: #f2ece0;
+  }
+  .bar-seg { width: 100%; }
+  .bar-date { font-size: 9.5px; color: #707b8d; margin-top: 6px; white-space: nowrap; }
+
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; white-space: nowrap; }
   th, td { padding: 10px 16px; text-align: right; font-size: 13.5px; }
   th:first-child, td:first-child { text-align: left; }
@@ -4229,11 +4224,164 @@ STATS_HTML = """<!doctype html>
 </header>
 
 <div class="wrap">
-  <p class="sub">Confirmed leads found per day, by county. Total is the same-day sum across every county you have access to.</p>
-  <div class="table-card">
-    __STATS_TABLE_HTML__
+  <p class="sub">Confirmed leads found per day, by county. Total is the same-day sum across whichever counties are checked below.</p>
+
+  <div class="filters">
+    <div id="county-filters"></div>
+    <select id="days-filter">
+      <option value="7">Last 7 days</option>
+      <option value="14">Last 14 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="60">Last 60 days</option>
+      <option value="90">Last 90 days</option>
+      <option value="all">All time</option>
+    </select>
   </div>
+
+  <div class="chart-card" id="chart-wrap"></div>
+  <div class="table-card" id="table-wrap"></div>
 </div>
+
+<script id="stats-data" type="application/json">__STATS_DATA_JSON__</script>
+<script>
+  const STATS_DATA = JSON.parse(document.getElementById('stats-data').textContent);
+  // Muted, mutually-distinguishable colors, not brand gold/navy - those
+  // two alone can't tell apart up to 10 county segments in one bar.
+  const PALETTE = ['#a6822e', '#3f6b8f', '#5f8f5a', '#9a4f4f', '#7c5e9c', '#4f8f8a', '#b5763f', '#5a6b8f', '#8f5a7a', '#6b8f4f'];
+  let selectedCounties = new Set(STATS_DATA.counties.map((c) => c.folder));
+
+  function colorFor(folder) {
+    const idx = STATS_DATA.counties.findIndex((c) => c.folder === folder);
+    return PALETTE[idx % PALETTE.length];
+  }
+
+  function toDateStr(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  function formatShortDate(dateStr) {
+    const [, m, d] = dateStr.split('-');
+    return `${m}/${d}`;
+  }
+
+  // Days-window filters need every calendar day in range, not just days
+  // with a lead - a real zero-lead day should show as an empty bar, not
+  // a gap that could read as a rendering error. "All time" skips this and
+  // just uses whatever dates actually have data, sparse - filling zeros
+  // across months of history would mostly draw empty bars for no benefit.
+  function buildDisplayRows(daysValue) {
+    if (daysValue === 'all') return STATS_DATA.dailyStats.slice();
+    const days = parseInt(daysValue, 10);
+    const byDate = new Map(STATS_DATA.dailyStats.map((d) => [d.date, d]));
+    const rows = [];
+    const today = new Date();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today.getTime() - i * 86400000);
+      const dateStr = toDateStr(d);
+      rows.push(byDate.get(dateStr) || { date: dateStr, byCounty: {}, total: 0 });
+    }
+    return rows;
+  }
+
+  // Recompute byCounty/total against only the checked counties, so
+  // unchecking one actually removes it from the Total too, not just its
+  // own column/segment.
+  function filterRow(row) {
+    const byCounty = {};
+    let total = 0;
+    for (const folder of selectedCounties) {
+      const count = row.byCounty[folder] || 0;
+      if (count) byCounty[folder] = count;
+      total += count;
+    }
+    return { date: row.date, byCounty, total };
+  }
+
+  function renderCountyFilters() {
+    const wrap = document.getElementById('county-filters');
+    wrap.innerHTML = '';
+    STATS_DATA.counties.forEach((c) => {
+      const label = document.createElement('label');
+      label.className = 'county-filter-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.addEventListener('change', () => {
+        if (cb.checked) selectedCounties.add(c.folder); else selectedCounties.delete(c.folder);
+        render();
+      });
+      const swatch = document.createElement('span');
+      swatch.className = 'county-swatch';
+      swatch.style.background = colorFor(c.folder);
+      label.appendChild(cb);
+      label.appendChild(swatch);
+      label.appendChild(document.createTextNode(c.label));
+      wrap.appendChild(label);
+    });
+  }
+
+  function renderChart(rows) {
+    const chartWrap = document.getElementById('chart-wrap');
+    if (!rows.length) {
+      chartWrap.innerHTML = '<p class="sub" style="margin:0;">No data for this range.</p>';
+      return;
+    }
+    const maxTotal = Math.max(1, ...rows.map((r) => r.total));
+    const chronological = rows.slice().reverse();
+    let html = '<div class="bars">';
+    chronological.forEach((row) => {
+      html += `<div class="bar-col" title="${row.date}: ${row.total} lead(s)">`;
+      html += `<div class="bar-total">${row.total || ''}</div>`;
+      html += '<div class="bar-stack">';
+      STATS_DATA.counties.forEach((c) => {
+        const count = row.byCounty[c.folder];
+        if (!count) return;
+        const heightPct = (count / maxTotal) * 100;
+        html += `<div class="bar-seg" style="height:${heightPct}%; background:${colorFor(c.folder)};" title="${c.label}: ${count}"></div>`;
+      });
+      html += '</div>';
+      html += `<div class="bar-date">${formatShortDate(row.date)}</div>`;
+      html += '</div>';
+    });
+    html += '</div>';
+    chartWrap.innerHTML = html;
+  }
+
+  function renderTable(rows) {
+    const tableWrap = document.getElementById('table-wrap');
+    if (!STATS_DATA.counties.length) {
+      tableWrap.innerHTML = '<p class="sub" style="margin:0; padding:20px;">Your account doesn\\'t have access to any counties yet.</p>';
+      return;
+    }
+    if (!rows.length) {
+      tableWrap.innerHTML = '<p class="sub" style="margin:0; padding:20px;">No confirmed leads recorded yet.</p>';
+      return;
+    }
+    const cols = STATS_DATA.counties.filter((c) => selectedCounties.has(c.folder));
+    const headerCells = cols.map((c) => `<th>${c.label}</th>`).join('');
+    const bodyRows = rows.map((row) => {
+      const cells = cols.map((c) => {
+        const count = row.byCounty[c.folder] || 0;
+        return `<td class="${count ? '' : 'zero'}">${count}</td>`;
+      }).join('');
+      return `<tr><td>${row.date}</td>${cells}<td class="total-cell">${row.total}</td></tr>`;
+    }).join('');
+    tableWrap.innerHTML =
+      `<table><thead><tr><th>Date</th>${headerCells}<th class="total-col">Total</th></tr></thead>` +
+      `<tbody>${bodyRows}</tbody></table>`;
+  }
+
+  function render() {
+    const days = document.getElementById('days-filter').value;
+    const rows = buildDisplayRows(days).map(filterRow);
+    renderChart(rows);
+    renderTable(rows);
+  }
+
+  document.getElementById('days-filter').addEventListener('change', render);
+  renderCountyFilters();
+  render();
+</script>
 
 </body>
 </html>
@@ -4282,8 +4430,14 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             visible_counties = [c for c in COUNTIES if c["folder"] in get_allowed_county_folders(email)]
-            daily_stats = compute_daily_lead_stats(load_all_confirmed_leads(visible_counties))
-            page = STATS_HTML.replace("__STATS_TABLE_HTML__", build_stats_table_html(visible_counties, daily_stats))
+            stats_data = {
+                "counties": sorted(
+                    [{"folder": c["folder"], "label": c["label"]} for c in visible_counties],
+                    key=lambda c: c["label"],
+                ),
+                "dailyStats": compute_daily_lead_stats(load_all_confirmed_leads(visible_counties)),
+            }
+            page = STATS_HTML.replace("__STATS_DATA_JSON__", json.dumps(stats_data))
             body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
