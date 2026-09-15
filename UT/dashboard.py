@@ -4322,6 +4322,15 @@ STATS_HTML = """<!doctype html>
 
   function renderChart(rows) {
     const chartWrap = document.getElementById('chart-wrap');
+    // A bounded window (e.g. "Last 30 days") always fills every calendar
+    // day, so `rows` is never actually empty even for a user with zero
+    // county access - it'd otherwise draw 30 blank bars instead of
+    // deferring to the clearer "no access" message renderTable() already
+    // shows for this same case.
+    if (!STATS_DATA.counties.length) {
+      chartWrap.innerHTML = '';
+      return;
+    }
     if (!rows.length) {
       chartWrap.innerHTML = '<p class="sub" style="margin:0;">No data for this range.</p>';
       return;
