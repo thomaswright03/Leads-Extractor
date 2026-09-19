@@ -62,6 +62,7 @@ def is_map_only(email):
 COUNTY_FOLDER_TO_FIPS = {
     "slk": "49035",  # Salt Lake County, UT
     "uta": "49049",  # Utah County, UT
+    "web": "49057",  # Weber County, UT
     "mar": "04013",  # Maricopa County, AZ
     "apa": "04001",  # Apache County, AZ
     "gre": "04011",  # Greenlee County, AZ
@@ -489,6 +490,12 @@ COUNTIES = [
         "label": "Utah County",
         "state": "UT",
         "parcel_url_base": "https://www.utahcounty.gov/LandRecords/ValNotice.asp?av_serial=",
+    },
+    {
+        "folder": "web",
+        "label": "Weber County",
+        "state": "UT",
+        "parcel_url_base": "https://webercountyutah.gov/parcelsearch/current-taxes.php?id=",
     },
     {
         "folder": "mar",
