@@ -1403,6 +1403,79 @@ TEMPLATE = """<!doctype html>
     padding: 24px;
     overflow: hidden;
   }
+  .login-layout {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 56px;
+    max-width: 1120px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .login-cards { flex: 0 0 auto; }
+  .marketing-panel {
+    flex: 1 1 480px;
+    max-width: 560px;
+    color: #fff;
+    animation: cardRise .5s var(--ease);
+  }
+  .marketing-panel h2 {
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 34px;
+    line-height: 1.15;
+    margin: 0 0 14px;
+  }
+  .marketing-panel .tagline {
+    color: rgba(255,255,255,0.72);
+    font-size: 14.5px;
+    line-height: 1.5;
+    margin: 0 0 22px;
+    max-width: 460px;
+  }
+  #marketing-county-search {
+    width: 100%;
+    max-width: 320px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13.5px;
+    margin-bottom: 16px;
+  }
+  #marketing-county-search::placeholder { color: rgba(255,255,255,0.45); }
+  #marketing-county-search:focus-visible { outline: none; border-color: var(--gold-light); }
+  .county-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .county-chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 12px 14px;
+    transition: background-color .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease);
+  }
+  a.county-chip { display: block; text-decoration: none; cursor: pointer; }
+  a.county-chip:hover { background: rgba(255,255,255,0.11); border-color: rgba(236,206,138,0.4); transform: translateY(-1px); }
+  .county-chip .county-name { font-weight: 600; color: #fff; font-size: 13.5px; }
+  .county-chip .county-state { color: rgba(255,255,255,0.5); font-weight: 500; }
+  .county-chip .county-price { color: var(--gold-light); font-weight: 700; font-size: 15px; margin-top: 5px; }
+  .county-chip.is-taken { opacity: 0.4; }
+  .county-chip.is-taken .county-price { color: rgba(255,255,255,0.55); }
+  @media (max-width: 900px) {
+    .login-layout { justify-content: center; }
+    .marketing-panel { order: 2; text-align: center; }
+    .marketing-panel .tagline { margin-left: auto; margin-right: auto; }
+    #marketing-county-search { margin-left: auto; margin-right: auto; display: block; }
+    .login-cards { order: 1; }
+  }
   .login-card {
     position: relative;
     background: var(--card);
@@ -1520,6 +1593,15 @@ TEMPLATE = """<!doctype html>
 <body>
 
 <div class="login-screen" id="login-screen">
+ <div class="login-layout">
+  <div class="marketing-panel" id="marketing-panel">
+    <h2>Deceased-Owner Property Leads</h2>
+    <p class="tagline">Obituaries cross-checked against county property records, delivered daily. One agent per county &mdash; once it's taken, it's off the market.</p>
+    <input type="text" id="marketing-county-search" placeholder="Search counties&hellip;">
+    <div class="county-grid" id="marketing-county-grid"></div>
+    <p class="sub" id="marketing-county-empty" style="display:none; color: rgba(255,255,255,0.6);">No counties match &mdash; try a different search.</p>
+  </div>
+  <div class="login-cards">
   <form class="login-card" id="login-form">
     <div class="mark"></div>
     <h1>Data Lead Sell</h1>
@@ -1588,6 +1670,8 @@ TEMPLATE = """<!doctype html>
     <p class="sub">This only takes a few seconds - hang tight.</p>
     <div class="login-error" id="checkout-pending-error"></div>
   </div>
+  </div>
+ </div>
 </div>
 
 <div id="app-content" style="display:none;">
@@ -2691,16 +2775,68 @@ TEMPLATE = """<!doctype html>
   const showSignupLink = document.getElementById('show-signup-link');
   const showLoginLink = document.getElementById('show-login-link');
 
-  showSignupLink.addEventListener('click', (e) => {
-    e.preventDefault();
+  function openSignupForm(searchTerm) {
     loginForm.style.display = 'none';
     signupForm.style.display = 'block';
+    if (searchTerm) {
+      signupPlanSearch.value = searchTerm;
+      renderSignupPlans();
+    }
+    signupForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  showSignupLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    openSignupForm();
   });
   showLoginLink.addEventListener('click', (e) => {
     e.preventDefault();
     signupForm.style.display = 'none';
     loginForm.style.display = 'block';
   });
+
+  // --- Marketing panel (public county availability, visible before signing
+  // in or up at all - the whole point is to sell the visitor on what's
+  // available before asking for an account, not hide it behind a click). ---
+  const marketingGrid = document.getElementById('marketing-county-grid');
+  const marketingSearch = document.getElementById('marketing-county-search');
+  const marketingEmpty = document.getElementById('marketing-county-empty');
+
+  function renderMarketingCounties() {
+    const searchVal = marketingSearch.value.trim().toLowerCase();
+    let plans = leadData.pricingPlans || [];
+    if (searchVal) plans = plans.filter((p) => p.label.toLowerCase().includes(searchVal));
+    // Available counties first - that's what a new visitor is actually
+    // here to see; already-taken ones stay visible (not hidden) since
+    // seeing a county already claimed is itself part of the pitch ("only
+    // one agent per county, several are already gone").
+    plans = plans.slice().sort((a, b) => (a.taken === b.taken ? 0 : a.taken ? 1 : -1));
+
+    marketingGrid.innerHTML = '';
+    plans.forEach((plan) => {
+      const countyName = plan.label.replace(/\s*Leads Access$/, '');
+      const chip = document.createElement(plan.taken ? 'div' : 'a');
+      chip.className = 'county-chip' + (plan.taken ? ' is-taken' : '');
+      if (!plan.taken) {
+        chip.href = '#';
+        chip.addEventListener('click', (e) => {
+          e.preventDefault();
+          openSignupForm(countyName);
+        });
+      }
+      const nameEl = el('div', 'county-name', countyName + (plan.state ? ' ' : ''));
+      if (plan.state) nameEl.appendChild(el('span', 'county-state', plan.state));
+      chip.appendChild(nameEl);
+      chip.appendChild(el(
+        'div', 'county-price',
+        plan.taken ? 'Taken' : `$${(plan.priceCents / 100).toFixed(0)}/mo`,
+      ));
+      marketingGrid.appendChild(chip);
+    });
+    marketingEmpty.style.display = plans.length === 0 ? 'block' : 'none';
+  }
+
+  renderMarketingCounties();
+  marketingSearch.addEventListener('input', renderMarketingCounties);
 
   // The return-address State field is filled in before a plan is chosen
   // (it's earlier on the same form) - once it holds a real 2-letter state
