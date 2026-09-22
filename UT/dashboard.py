@@ -1433,6 +1433,47 @@ TEMPLATE = """<!doctype html>
     margin: 0 0 22px;
     max-width: 460px;
   }
+  .how-it-works {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+  }
+  .hiw-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(236,206,138,0.85);
+    margin-bottom: 12px;
+  }
+  .hiw-steps {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .hiw-step {
+    flex: 1 1 150px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .hiw-step.hiw-confirmed { background: rgba(236,206,138,0.1); border-color: rgba(236,206,138,0.35); }
+  .hiw-step-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 6px;
+  }
+  .hiw-confirmed .hiw-step-label { color: var(--gold-light); }
+  .hiw-step-body { font-size: 12.5px; line-height: 1.4; color: rgba(255,255,255,0.88); }
+  .hiw-arrow { display: flex; align-items: center; color: rgba(255,255,255,0.35); font-size: 16px; }
+  .hiw-disclaimer { font-size: 10.5px; color: rgba(255,255,255,0.4); margin: 12px 0 0; font-style: italic; }
   #marketing-county-search {
     width: 100%;
     max-width: 320px;
@@ -1475,6 +1516,10 @@ TEMPLATE = """<!doctype html>
     .marketing-panel .tagline { margin-left: auto; margin-right: auto; }
     #marketing-county-search { margin-left: auto; margin-right: auto; display: block; }
     .login-cards { order: 1; }
+    .hiw-steps { flex-direction: column; }
+    .hiw-step { flex: none; }
+    .hiw-arrow { transform: rotate(90deg); justify-content: center; padding: 2px 0; }
+    .how-it-works { text-align: left; }
   }
   .login-card {
     position: relative;
@@ -1597,6 +1642,28 @@ TEMPLATE = """<!doctype html>
   <div class="marketing-panel" id="marketing-panel">
     <h2>Deceased-Owner Property Leads</h2>
     <p class="tagline">Obituaries cross-checked against county property records, delivered daily. One agent per county &mdash; once it's taken, it's off the market.</p>
+
+    <div class="how-it-works">
+      <div class="hiw-label">How a match works</div>
+      <div class="hiw-steps">
+        <div class="hiw-step">
+          <div class="hiw-step-label">Obituary</div>
+          <div class="hiw-step-body">&ldquo;James William Carter, 82&hellip; survived by his loving wife, Patricia.&rdquo;</div>
+        </div>
+        <div class="hiw-arrow">&rarr;</div>
+        <div class="hiw-step">
+          <div class="hiw-step-label">County Record</div>
+          <div class="hiw-step-body">CARTER, JAMES W &amp; PATRICIA M<br>1234 Maple St</div>
+        </div>
+        <div class="hiw-arrow">&rarr;</div>
+        <div class="hiw-step hiw-confirmed">
+          <div class="hiw-step-label">Confirmed Lead</div>
+          <div class="hiw-step-body">&ldquo;Patricia&rdquo; matched the obituary &mdash; ready to mail</div>
+        </div>
+      </div>
+      <p class="hiw-disclaimer">Illustrative example only &mdash; not a real person or property.</p>
+    </div>
+
     <input type="text" id="marketing-county-search" placeholder="Search counties&hellip;">
     <div class="county-grid" id="marketing-county-grid"></div>
     <p class="sub" id="marketing-county-empty" style="display:none; color: rgba(255,255,255,0.6);">No counties match &mdash; try a different search.</p>
