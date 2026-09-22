@@ -1394,38 +1394,62 @@ TEMPLATE = """<!doctype html>
     position: relative;
     min-height: 100vh;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     background:
       radial-gradient(900px 500px at 20% 0%, rgba(236,206,138,0.10), transparent 60%),
       radial-gradient(700px 500px at 100% 100%, rgba(236,206,138,0.06), transparent 55%),
       linear-gradient(135deg, var(--navy-deep), var(--navy) 55%, var(--navy-light));
-    padding: 24px;
-    overflow: hidden;
+    padding: 56px 24px;
   }
   .login-layout {
     position: relative;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    gap: 56px;
-    max-width: 1120px;
+    gap: 64px;
+    max-width: 1200px;
     width: 100%;
     flex-wrap: wrap;
   }
   .login-cards { flex: 0 0 auto; }
+  @media (min-width: 901px) {
+    .login-cards {
+      position: sticky;
+      top: 40px;
+      align-self: flex-start;
+    }
+  }
   .marketing-panel {
-    flex: 1 1 480px;
-    max-width: 560px;
+    flex: 1 1 520px;
+    max-width: 620px;
     color: #fff;
     animation: cardRise .5s var(--ease);
   }
   .marketing-panel h2 {
     font-family: Georgia, "Iowan Old Style", Palatino, serif;
-    font-size: 34px;
+    font-size: 36px;
     line-height: 1.15;
     margin: 0 0 14px;
   }
+  .headline-accent { color: var(--gold-light); }
+  .section-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(236,206,138,0.85);
+    margin: 0 0 12px;
+  }
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity .6s var(--ease), transform .6s var(--ease);
+  }
+  .reveal-on-scroll.is-visible { opacity: 1; transform: translateY(0); }
+  .value-props .value-prop.reveal-on-scroll:nth-child(2) { transition-delay: .06s; }
+  .value-props .value-prop.reveal-on-scroll:nth-child(3) { transition-delay: .12s; }
+  .value-props .value-prop.reveal-on-scroll:nth-child(4) { transition-delay: .18s; }
   .marketing-panel .tagline {
     color: rgba(255,255,255,0.72);
     font-size: 14.5px;
@@ -1447,6 +1471,20 @@ TEMPLATE = """<!doctype html>
     margin: 0 0 4px;
   }
   .territory-stat strong { color: var(--gold-light); }
+  .territory-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.1);
+    overflow: hidden;
+    margin: 10px 0 2px;
+  }
+  .territory-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--gold-deep), var(--gold-light));
+    border-radius: 999px;
+    transition: width .8s var(--ease);
+  }
   .territory-toggle {
     background: none;
     border: none;
@@ -1486,8 +1524,10 @@ TEMPLATE = """<!doctype html>
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform .2s var(--ease), background-color .2s var(--ease);
   }
   .vp-icon svg { width: 18px; height: 18px; stroke: var(--gold-light); fill: none; }
+  .value-prop:hover .vp-icon { transform: scale(1.08); background: rgba(236,206,138,0.22); }
   .vp-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 3px; }
   .vp-body { font-size: 12px; line-height: 1.45; color: rgba(255,255,255,0.65); }
   .calc-card {
@@ -1496,7 +1536,9 @@ TEMPLATE = """<!doctype html>
     border-radius: 14px;
     padding: 18px 20px;
     margin-bottom: 20px;
+    transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
   }
+  .calc-card:hover { border-color: rgba(236,206,138,0.5); box-shadow: 0 0 24px rgba(236,206,138,0.08); }
   .calc-title { font-family: Georgia, "Iowan Old Style", Palatino, serif; font-size: 16px; color: #fff; margin-bottom: 12px; }
   .calc-county-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
   .calc-county-row select {
@@ -1523,7 +1565,18 @@ TEMPLATE = """<!doctype html>
     color: rgba(236,206,138,0.85);
     margin: 14px 0 6px;
   }
-  .calc-output { font-size: 14px; line-height: 1.5; color: #fff; margin-bottom: 8px; }
+  .calc-result { margin: 2px 0 10px; }
+  .calc-result-stat {
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--gold-light);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .calc-result-unit { font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.7); margin-left: 8px; }
+  .calc-result-copy { font-size: 13.5px; line-height: 1.45; color: rgba(255,255,255,0.85); margin: 6px 0 0; }
+  .calc-pace { font-size: 12px; line-height: 1.4; color: rgba(255,255,255,0.55); margin: 8px 0 8px; }
   .calc-reset {
     background: none;
     border: none;
@@ -1799,39 +1852,41 @@ TEMPLATE = """<!doctype html>
 <div class="login-screen" id="login-screen">
  <div class="login-layout">
   <div class="marketing-panel" id="marketing-panel">
-    <h2>One County. One Buyer. Forever.</h2>
+    <h2>One County. One Buyer. <span class="headline-accent">Forever.</span></h2>
     <p class="tagline">Every day we cross-check new obituaries against your county's property assessor records to confirm a real decedent-to-property match &mdash; delivered to your dashboard with the assessed value attached and a mailer ready to send, in a county no one else can ever buy into once it's yours.</p>
 
-    <div class="territory-strip" id="territory-strip">
+    <div class="territory-strip reveal-on-scroll" id="territory-strip">
       <p class="territory-stat" id="territory-stat">Loading availability&hellip;</p>
+      <div class="territory-bar" aria-hidden="true"><div class="territory-bar-fill" id="territory-bar-fill"></div></div>
       <button type="button" class="territory-toggle" id="territory-toggle" aria-expanded="false">See by state</button>
       <div class="territory-breakdown" id="territory-breakdown" hidden></div>
       <p class="territory-note">Reflects current listings. A county is never re-listed once sold.</p>
     </div>
 
+    <div class="section-eyebrow reveal-on-scroll">Why It Works</div>
     <div class="value-props">
-      <div class="value-prop">
+      <div class="value-prop reveal-on-scroll">
         <div class="vp-icon"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"></circle><line x1="14.5" y1="14.5" x2="20" y2="20"></line><path d="M7.3 10.3l1.8 1.8L12.7 8"></path></svg></div>
         <div>
           <div class="vp-title">Confirmed, Not Guessed</div>
           <div class="vp-body">Every lead starts as a real obituary, cross-referenced against that county's property records until a decedent and a property owner actually match &mdash; name, address, and assessed value attached.</div>
         </div>
       </div>
-      <div class="value-prop">
+      <div class="value-prop reveal-on-scroll">
         <div class="vp-icon"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7.5a4 4 0 0 1 8 0V11"></path></svg></div>
         <div>
           <div class="vp-title">One Buyer. Permanently.</div>
           <div class="vp-body">Each county sells exactly once. The moment it's purchased it's marked Taken and pulled off the market for good &mdash; never resold, never shared.</div>
         </div>
       </div>
-      <div class="value-prop">
+      <div class="value-prop reveal-on-scroll">
         <div class="vp-icon"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></div>
         <div>
           <div class="vp-title">Dashboard to Mailbox, One Click</div>
           <div class="vp-body">Every confirmed lead lands in your dashboard with a built-in &ldquo;Send Mailer&rdquo; action &mdash; no separate mail house, no exporting a list.</div>
         </div>
       </div>
-      <div class="value-prop">
+      <div class="value-prop reveal-on-scroll">
         <div class="vp-icon"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v6h6"></path><path d="M5.5 15a8 8 0 1 0 2-9.5L4 10"></path></svg></div>
         <div>
           <div class="vp-title">Fresh Every Day, Automatically</div>
@@ -1840,7 +1895,7 @@ TEMPLATE = """<!doctype html>
       </div>
     </div>
 
-    <div class="how-it-works">
+    <div class="how-it-works reveal-on-scroll">
       <div class="hiw-label">How a match works</div>
       <div class="hiw-steps">
         <div class="hiw-step">
@@ -1861,7 +1916,8 @@ TEMPLATE = """<!doctype html>
       <p class="hiw-disclaimer">This is how every lead in your dashboard is built &mdash; the names above are invented for illustration.</p>
     </div>
 
-    <div class="calc-card" id="calc-card">
+    <div class="calc-card reveal-on-scroll" id="calc-card">
+      <div class="section-eyebrow">Run Your Own Numbers</div>
       <div class="calc-title">What would this county need to pay off?</div>
       <div class="calc-county-row">
         <select id="calc-county-select"></select>
@@ -1880,18 +1936,24 @@ TEMPLATE = """<!doctype html>
         <input type="range" id="calc-profit" min="1000" max="50000" step="500" value="8000">
       </div>
       <p class="calc-disclaimer">Your estimate &mdash; not a customer result</p>
-      <p class="calc-output" id="calc-output" aria-live="polite"></p>
+      <div class="calc-result" id="calc-result" aria-live="polite">
+        <span class="calc-result-stat" id="calc-result-number">&mdash;</span><span class="calc-result-unit" id="calc-result-unit"></span>
+        <p class="calc-result-copy" id="calc-result-copy"></p>
+      </div>
+      <p class="calc-pace" id="calc-pace"></p>
       <button type="button" class="calc-reset" id="calc-reset">Reset to defaults</button>
       <p class="calc-note">Starting numbers above are arbitrary, not typical &mdash; drag them to match your own assumptions.</p>
     </div>
 
-    <p class="exclusivity-callout">Sold to exactly one buyer, permanently. Every county marked <strong>Taken</strong> below is gone for good &mdash; the rest are still open.</p>
+    <p class="exclusivity-callout reveal-on-scroll">Sold to exactly one buyer, permanently. Every county marked <strong>Taken</strong> below is gone for good &mdash; the rest are still open.</p>
 
-    <input type="text" id="marketing-county-search" placeholder="Search counties&hellip;">
-    <div class="county-grid" id="marketing-county-grid"></div>
-    <p class="sub" id="marketing-county-empty" style="display:none; color: rgba(255,255,255,0.6);">No counties match &mdash; try a different search.</p>
+    <div class="county-search-block reveal-on-scroll">
+      <input type="text" id="marketing-county-search" placeholder="Search counties&hellip;">
+      <div class="county-grid" id="marketing-county-grid"></div>
+      <p class="sub" id="marketing-county-empty" style="display:none; color: rgba(255,255,255,0.6);">No counties match &mdash; try a different search.</p>
+    </div>
 
-    <div class="not-here-callout">
+    <div class="not-here-callout reveal-on-scroll">
       <div class="nh-label">What you won't find here</div>
       <ul>
         <li>No testimonials or customer counts &mdash; we don't have any to publish yet, and won't invent them.</li>
@@ -3144,6 +3206,7 @@ TEMPLATE = """<!doctype html>
   // box - it always describes the whole market, not the filtered view. ---
   (function renderTerritoryStrip() {
     const statEl = document.getElementById('territory-stat');
+    const barFillEl = document.getElementById('territory-bar-fill');
     const breakdownEl = document.getElementById('territory-breakdown');
     const toggleEl = document.getElementById('territory-toggle');
     if (!statEl) return;
@@ -3151,6 +3214,7 @@ TEMPLATE = """<!doctype html>
     const total = plans.length;
     const available = plans.filter((p) => !p.taken).length;
     statEl.innerHTML = `<strong>${available}</strong> of ${total} counties still available`;
+    if (barFillEl) barFillEl.style.width = total ? `${(available / total) * 100}%` : '0%';
 
     const byState = {};
     plans.forEach((p) => {
@@ -3186,7 +3250,10 @@ TEMPLATE = """<!doctype html>
     const leadsOut = document.getElementById('calc-leads-out');
     const closeOut = document.getElementById('calc-close-out');
     const profitOut = document.getElementById('calc-profit-out');
-    const outputEl = document.getElementById('calc-output');
+    const resultNumberEl = document.getElementById('calc-result-number');
+    const resultUnitEl = document.getElementById('calc-result-unit');
+    const resultCopyEl = document.getElementById('calc-result-copy');
+    const paceEl = document.getElementById('calc-pace');
     const resetBtn = document.getElementById('calc-reset');
     if (!select) return;
 
@@ -3222,16 +3289,18 @@ TEMPLATE = """<!doctype html>
       priceEl.textContent = '$' + price.toFixed(0) + '/mo';
 
       const expectedDeals = leads * (closeRate / 100);
-      let headline;
       if (profit >= price) {
         const months = Math.floor(profit / Math.max(price, 1));
-        headline = `Just one closed deal this month would cover roughly ${months} month${months === 1 ? '' : 's'} of this county's cost.`;
+        resultNumberEl.textContent = String(months);
+        resultUnitEl.textContent = months === 1 ? 'month covered' : 'months covered';
+        resultCopyEl.textContent = "Just one closed deal this month would cover roughly that much of this county's cost.";
       } else {
         const dealsNeeded = Math.ceil(price / Math.max(profit, 1));
-        headline = `At these numbers, it would take about ${dealsNeeded} closed deal${dealsNeeded === 1 ? '' : 's'} this month to cover this county's cost. Everything after that is yours to keep.`;
+        resultNumberEl.textContent = String(dealsNeeded);
+        resultUnitEl.textContent = dealsNeeded === 1 ? 'closed deal to break even' : 'closed deals to break even';
+        resultCopyEl.textContent = 'At these numbers, that’s what it would take to cover this county’s cost this month. Everything after that is yours to keep.';
       }
-      const pace = `Based on your inputs, you'd expect to close about ${expectedDeals.toFixed(1)} deal${expectedDeals === 1 ? '' : 's'} a month from this county alone.`;
-      outputEl.innerHTML = `${headline}<br>${pace}`;
+      paceEl.textContent = `Based on your inputs, you'd expect to close about ${expectedDeals.toFixed(1)} deal${expectedDeals === 1 ? '' : 's'} a month from this county alone.`;
     }
 
     select.value = String(available[0].priceCents);
@@ -3263,6 +3332,28 @@ TEMPLATE = """<!doctype html>
       const rect = calcCard.getBoundingClientRect();
       bar.classList.toggle('is-visible', rect.bottom < 0);
     }, { passive: true });
+  })();
+
+  // --- Scroll-reveal: a quiet fade-up as each section enters view, tied to
+  // the visitor's own scrolling (not a timer) - consistent with the rest of
+  // the page's "nothing moves unless you're interacting with it" posture. ---
+  (function setupScrollReveal() {
+    const targets = document.querySelectorAll('.reveal-on-scroll');
+    if (!targets.length) return;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced || !('IntersectionObserver' in window)) {
+      targets.forEach((t) => t.classList.add('is-visible'));
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    targets.forEach((t) => observer.observe(t));
   })();
 
   // The return-address State field is filled in before a plan is chosen
