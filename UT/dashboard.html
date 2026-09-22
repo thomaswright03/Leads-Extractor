@@ -1538,7 +1538,10 @@
   }
 
   const MERGE_FIELD_MAP = {
-    full_name: 'fullName', owner_name: 'ownerName', address: 'address',
+    // owner_name pulls the cleaned salutation (e.g. "Patricia Carter" or
+    // "the Carter Family"), never the raw ALL-CAPS assessor record - see
+    // derive_salutation_name() in dashboard.py.
+    full_name: 'fullName', owner_name: 'salutationName', address: 'address',
     city: 'city', state: 'state', zip: 'zip',
   };
 
@@ -1632,6 +1635,7 @@
       body: JSON.stringify({
         fullName: lead.fullName,
         ownerName: lead.ownerName,
+        salutationName: lead.salutationName,
         parcelId: lead.parcelId,
         county: lead.countyFolder,
         address: lead.address,

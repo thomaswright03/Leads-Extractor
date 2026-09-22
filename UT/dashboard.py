@@ -620,6 +620,94 @@ def _clean_cell(value):
     return str(value).strip()
 
 
+# Trailing abbreviations the county assessor appends to mark a trust/entity
+# owner (e.g. "SMITH, JOHN A & MARY B TR") - checked as a whole trailing
+# token, not a substring, so this never fires on a person's actual initials.
+_TRUST_OR_ENTITY_TRAILING_TOKENS = {"TR", "TRS", "TTEE", "EST", "LLC", "INC", "CORP"}
+_TRUST_OR_ENTITY_WORD_RE = re.compile(r"\b(TRUST|TRUSTEE|TRUSTEES|ESTATE)\b", re.IGNORECASE)
+
+
+def _title_case_name_token(token):
+    """Proper-cases one name token without mangling Mc/O'/hyphenated names
+    the way str.title() does (McDonald -> Mcdonald, O'Brien -> O'Brien)."""
+    token = token.strip().lower()
+    return "".join(
+        part if part in ("-", "'") else part.capitalize()
+        for part in re.split(r"([-'])", token)
+    )
+
+
+def derive_salutation_name(owner_name_raw, decedent_full_name):
+    """Turns a raw county-assessor owner-record string - e.g.
+    "CARTER, JAMES W & PATRICIA M" or "SMITH, JOHN A & MARY B TR" - into a
+    safe letter salutation, instead of mailing the raw ALL-CAPS,
+    surname-first record verbatim.
+
+    Only produces a specific person's name ("Patricia Carter") when the
+    record shows a joint owner distinct from the decedent by first name;
+    everything else - a single-owner record, a trust/entity, or a record
+    where every name matches the decedent's own first name - falls back to
+    "the <Surname> Family". A single-owner record is never assumed to name
+    a living survivor: the deceased's own name can outlive them in the
+    assessor's records for months, and a nickname or missing-decedent-name
+    mismatch on a single owner could otherwise greet the deceased person
+    directly, which is exactly what the 2026-09-22 compliance review flagged
+    as unacceptable (a "confirmed" match can be wrong; the salutation must
+    degrade safely rather than confidently address the wrong or the
+    deceased person)."""
+    raw = (owner_name_raw or "").strip()
+    if not raw:
+        return ""
+
+    upper = raw.upper()
+    tokens = upper.replace(",", " ").split()
+    is_trust_or_entity = bool(_TRUST_OR_ENTITY_WORD_RE.search(upper)) or (
+        tokens and tokens[-1] in _TRUST_OR_ENTITY_TRAILING_TOKENS
+    )
+
+    surname_part, _, given_part = raw.partition(",")
+    surname_guess = surname_part if not is_trust_or_entity or "," in raw else raw
+    surname_guess = _TRUST_OR_ENTITY_WORD_RE.sub("", surname_guess)
+    surname_words = [w for w in surname_guess.split() if w.upper() not in _TRUST_OR_ENTITY_TRAILING_TOKENS]
+    # A raw record can already say "... FAMILY TRUST" - drop that trailing
+    # "FAMILY" so the fallback below doesn't double up into "X Family Family".
+    if surname_words and surname_words[-1].upper() == "FAMILY":
+        surname_words = surname_words[:-1]
+    surname_guess = " ".join(surname_words)
+    # Join every remaining word, not just the first, so a compound surname
+    # (e.g. "VAN DYKE") doesn't get truncated to "Van".
+    surname = " ".join(_title_case_name_token(w) for w in surname_guess.split())
+    if not surname:
+        return "Property Owner"
+
+    if is_trust_or_entity:
+        return f"the {surname} Family"
+
+    decedent_first = ""
+    if decedent_full_name and decedent_full_name.split():
+        decedent_first = decedent_full_name.split()[0].lower()
+
+    owner_entries = [e for e in re.split(r"\s*&\s*|\bAND\b", given_part, flags=re.IGNORECASE) if e.strip()]
+    if len(owner_entries) < 2:
+        # A single owner on record isn't positive evidence of a living
+        # co-owner distinct from the decedent - see the docstring.
+        return f"the {surname} Family"
+
+    survivors = []
+    for entry in owner_entries:
+        first_token = entry.strip().strip(".").split()[:1]
+        first_token = first_token[0] if first_token else ""
+        if not first_token or len(first_token) <= 2:
+            continue  # too short to be a real first name, e.g. a bare initial
+        if decedent_first and first_token.lower() == decedent_first:
+            continue  # this entry is the decedent, not a survivor to greet
+        survivors.append(_title_case_name_token(first_token))
+
+    if len(survivors) == 1:
+        return f"{survivors[0]} {surname}"
+    return f"the {surname} Family"
+
+
 def discover_dated_excel_files(county_dir):
     """Every DC.py export sitting in one county's folder, named
     YYYY-MM-DD[_HH-MM-SS].xlsx."""
@@ -664,10 +752,17 @@ def load_confirmed_leads_from_excel(county):
                 continue
             parcel_id = _clean_cell(row.get("Parcel ID", ""))
             matched_keywords_raw = _clean_cell(row.get("Matched Keywords", ""))
+            owner_name = _clean_cell(row.get("Owner Name", ""))
 
             leads_by_key[(full_name, parcel_id)] = {
                 "fullName": full_name,
-                "ownerName": _clean_cell(row.get("Owner Name", "")),
+                "ownerName": owner_name,
+                # Never mail the raw assessor record verbatim (all-caps,
+                # surname-first, and it can still show the deceased's own
+                # name) - see derive_salutation_name(). ownerName above is
+                # kept as-is for the dashboard table, where an agent needs
+                # the real record to verify the match against the obituary.
+                "salutationName": derive_salutation_name(owner_name, full_name),
                 "parcelId": parcel_id,
                 "assessorUrl": assessor_url(parcel_id, county["parcel_url_base"]),
                 "confirmed": True,
@@ -2343,7 +2438,10 @@ TEMPLATE = """<!doctype html>
   }
 
   const MERGE_FIELD_MAP = {
-    full_name: 'fullName', owner_name: 'ownerName', address: 'address',
+    // owner_name pulls the cleaned salutation (e.g. "Patricia Carter" or
+    // "the Carter Family"), never the raw ALL-CAPS assessor record - see
+    // derive_salutation_name() in dashboard.py.
+    full_name: 'fullName', owner_name: 'salutationName', address: 'address',
     city: 'city', state: 'state', zip: 'zip',
   };
 
@@ -2440,6 +2538,7 @@ TEMPLATE = """<!doctype html>
       body: JSON.stringify({
         fullName: lead.fullName,
         ownerName: lead.ownerName,
+        salutationName: lead.salutationName,
         parcelId: lead.parcelId,
         county: lead.countyFolder,
         address: lead.address,
@@ -3624,7 +3723,14 @@ def handle_send_letter(payload, sender_email=None):
     parcel_id = payload.get("parcelId", "")
     county = payload.get("county", "")
     message = payload.get("message", "")
-    to_name = owner_name or full_name
+    # The actual mailing recipient name is the cleaned salutation, never the
+    # raw assessor record - see derive_salutation_name(). owner_name is
+    # still recorded below for the historical/audit trail. salutationName
+    # is trusted from the client the same way every other lead field here
+    # already is (fullName, ownerName, parcelId, address...) - it's
+    # server-derived data the client is just echoing back, not user input.
+    salutation_name = payload.get("salutationName", "")
+    to_name = salutation_name or owner_name or full_name
 
     owner_email = pipeline_db.get_county_owner(county) if county else None
     if sender_email and owner_email and sender_email.strip().lower() != owner_email.strip().lower():
