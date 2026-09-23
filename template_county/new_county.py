@@ -41,10 +41,21 @@ STATE_ABBR_BY_NAME = dict(STATES)
 
 # Every file in this folder that should be copied into the new county folder,
 # with any __TOKEN__ placeholders swapped for the answers collected below.
-# (Not copied: pipeline_cache.db - starts fresh per county; this script itself.)
+# (Not copied: pipeline_cache.db - starts fresh per county; this script itself.
+# Also not copied, as of 2026-09-22: dashboard.py/dashboard.html. A single
+# shared UT/dashboard.py now serves every county by reading its exported
+# leads off disk (see UT/dashboard.py's COUNTIES / COUNTY_FOLDER_TO_FIPS) -
+# a per-county dashboard.py hasn't actually been used in production for a
+# long time, but the wizard kept scaffolding a fresh copy into every new
+# county anyway. Worse, that copy still used the old hardcoded
+# VALID_EMAIL/VALID_PASSWORD client-side check from before real Supabase
+# auth existed, protecting a page that embeds that county's actual lead
+# data - so every new county was getting a real, if obscure, data exposure
+# baked in on day one. See render_done() below for the manual step this
+# replaces: adding the new county to the shared dashboard.py by hand.)
 FILES_TO_COPY = [
-    "obi.py", "DC.py", "pricerdev.py",
-    "geocode.py", "dashboard.py", "dashboard.html", "master.py", "pipeline_db.py",
+    "obi.py", "DC.py",
+    "geocode.py", "master.py", "pipeline_db.py",
     "$.md", "pricer.md",
 ]
 
@@ -73,7 +84,7 @@ FIELD_GROUPS = [
     ("Geocoding fallback  (geocode.py)", [
         ("COUNTY_QUERY_SUFFIX", "Geocode query suffix", None),
     ]),
-    ("Dashboard  (dashboard.py)", [
+    ("Shared dashboard listing", [
         ("PARCEL_URL_BASE", "Parcel deep-link URL base",
          "https://apps.saltlakecounty.gov/assessor/new/valuationInfoExpanded.cfm?parcel_id="),
         ("COUNTY_LABEL", "Report title text", None),
@@ -229,6 +240,20 @@ def render_group(i):
 
 def render_done():
     path = wizard.answers.get("_created_path", "")
+    folder = wizard.answers.get("COUNTY_ABBR", "").strip().lower()
+    state_abbr = wizard.answers.get("STATE_ABBR", "")
+    county_label = wizard.answers.get("COUNTY_LABEL", "")
+    parcel_url_base = wizard.answers.get("PARCEL_URL_BASE", "")
+    snippet = (
+        f'"{folder}": "<FIPS CODE>",  # {county_label}, {state_abbr} - add to COUNTY_FOLDER_TO_FIPS\n\n'
+        "# ...and to the COUNTIES list:\n"
+        "{\n"
+        f'    "folder": "{folder}",\n'
+        f'    "label": "{county_label}",\n'
+        f'    "state": "{state_abbr}",\n'
+        f'    "parcel_url_base": "{parcel_url_base}",\n'
+        "},"
+    )
     return f"""
     <h1>Done</h1>
     <p>Created: <code>{html.escape(path)}</code></p>
@@ -238,7 +263,12 @@ def render_done():
     <code>pricer.md</code> - upload those two files to an AI assistant (along
     with a look at the county's actual assessor site in dev tools) and have
     it write both scripts from them.</p>
-    <p>Once both are in place, run master.py from that folder to start the pipeline.</p>
+    <p>This county isn't visible anywhere yet - the shared <code>UT/dashboard.py</code>
+    serves every county's leads, so it needs to know this one exists. Look up
+    this county's 5-digit FIPS code and add these two entries by hand:</p>
+    <pre style="background:#f2f2f2; padding:12px; overflow-x:auto; white-space:pre-wrap;">{html.escape(snippet)}</pre>
+    <p>Once <code>$.py</code>/<code>pricer.py</code> are in place and the county is
+    listed above, run master.py from that folder to start the pipeline.</p>
     <form method="post"><button type="submit" name="nav" value="restart">Set up another county</button></form>
     """
 

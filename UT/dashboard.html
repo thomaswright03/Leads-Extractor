@@ -372,6 +372,7 @@
   .badge.sent { background: var(--confirmed-bg); color: var(--confirmed-ink); }
   .badge.failed { background: #fbe4e4; color: #a13a3a; }
   .badge.not-sent { background: var(--review-bg); color: var(--review-ink); }
+  .badge.unknown { background: #fdf0d5; color: #8a5a00; }
   button.send-letter-btn {
     border: 1px solid var(--gold);
     background: transparent;
@@ -1370,7 +1371,7 @@
       </thead>
       <tbody id="confirmed-body"></tbody>
     </table>
-    <div class="empty" id="confirmed-empty" style="display:none;">No confirmed leads yet &mdash; run the pipeline to populate this list.</div>
+    <div class="empty" id="confirmed-empty" style="display:none;">No confirmed leads yet for this county &mdash; new matches are added automatically every night.</div>
   </div>
 </main>
 
@@ -1443,7 +1444,7 @@
 </div>
 
 <footer>
-  Generated locally from pipeline_cache.db &middot; parcel and obituary links open the original source for verification before contacting anyone.
+  Updated automatically every night &middot; parcel and obituary links open the original source for verification before contacting anyone.
 </footer>
 
 <script id="lead-data" type="application/json">{"confirmed": [], "templates": [{"id": "probate-inquiry", "name": "Probate Inquiry", "body": "Dear {{owner_name}},\n\nI'm reaching out regarding the property at {{address}}, {{city}}, {{state}} {{zip}}, which I understand may be part of an estate following the passing of {{full_name}}. Please accept my condolences.\n\nIf you are the person handling this property, I'd like to discuss options that might make this process easier for you, including a straightforward cash purchase with no repairs or listing required.\n\nFeel free to reach out whenever is convenient - there's no obligation.\n\nSincerely,"}, {"id": "cash-offer", "name": "Cash Offer", "body": "Dear {{owner_name}},\n\nI'm interested in purchasing the property at {{address}}, {{city}}, {{state}} {{zip}} for cash, as-is, on a timeline that works for you.\n\nNo repairs, no showings, no realtor commissions - just a simple, fast closing if it's something you'd consider.\n\nI'd welcome the chance to talk whenever you're ready.\n\nSincerely,"}], "pdfTemplates": [], "counties": [], "pricingPlans": [{"kind": "county", "key": "slk", "label": "Salt Lake County Leads Access", "priceCents": 20000}, {"kind": "county", "key": "uta", "label": "Utah County Leads Access", "priceCents": 10000}, {"kind": "state_bundle", "key": "UT", "label": "Utah (Whole State) Leads Access", "priceCents": 99999}]}</script>
@@ -1558,19 +1559,25 @@
 
   function letterStatusLabel(lead) {
     if (!lead.letter) return 'not-sent';
-    return lead.letter.status === 'sent' ? 'sent' : 'failed';
+    if (lead.letter.status === 'sent') return 'sent';
+    if (lead.letter.status === 'unknown') return 'unknown';
+    return 'failed';
   }
 
   function letterCell(lead) {
     const td = el('td', 'letter-cell');
     const label = letterStatusLabel(lead);
-    const badgeText = label === 'sent' ? 'Sent' : label === 'failed' ? 'Failed' : 'Not Sent';
+    const badgeText = label === 'sent' ? 'Sent'
+      : label === 'unknown' ? 'Charged, Unconfirmed'
+      : label === 'failed' ? 'Failed'
+      : 'Not Sent';
     const badge = el('span', `badge ${label}`, badgeText);
     td.appendChild(badge);
     if (lead.letter && lead.letter.sentAt) {
       td.appendChild(el('span', 'owner', lead.letter.sentAt));
     }
-    const btn = el('button', 'send-letter-btn', lead.letter ? 'Resend Letter' : 'Send Letter');
+    const btnText = label === 'unknown' ? 'Resend Anyway' : lead.letter ? 'Resend Letter' : 'Send Letter';
+    const btn = el('button', 'send-letter-btn', btnText);
     btn.type = 'button';
     btn.addEventListener('click', () => openLetterModal(lead));
     td.appendChild(btn);
@@ -1706,7 +1713,7 @@
     return confirmed.filter(l =>
       isWithinLastNDays(l.dateAddedRaw, 7) &&
       hasCompleteAddress(l) &&
-      letterStatusLabel(l) !== 'sent'
+      !['sent', 'unknown'].includes(letterStatusLabel(l))
     );
   }
 
@@ -2150,6 +2157,15 @@
   document.getElementById('placement-modal-close').addEventListener('click', closePlacementModal);
   placementBackdrop.addEventListener('click', (e) => {
     if (e.target === placementBackdrop) closePlacementModal();
+  });
+
+  // Escape closes whichever modal is currently open - none of the three
+  // backdrops above had a keyboard way to dismiss before this.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (modalBackdrop.classList.contains('open')) closeLetterModal();
+    if (bulkBackdrop.classList.contains('open')) closeBulkModal();
+    if (placementBackdrop.classList.contains('open')) closePlacementModal();
   });
 
   async function deletePdfTemplate(id) {

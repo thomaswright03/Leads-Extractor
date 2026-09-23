@@ -31,6 +31,27 @@ class LobAPIError(Exception):
     """Raised when Lob rejects the request - message is Lob's own error text."""
 
 
+class LobTimeoutError(LobAPIError):
+    """Raised when the request to Lob times out rather than being rejected -
+    Lob may or may not have actually received and printed the letter, so
+    this is handled distinctly from a normal LobAPIError (which means Lob
+    explicitly said no, and it's safe to refund immediately). See
+    handle_send_letter() in dashboard.py for how this is reconciled."""
+
+
+def validate_send_config(from_address=None):
+    """Raises MailerConfigError for anything send_letter()/send_letter_pdf()
+    would eventually raise it for anyway - LOB_API_KEY, plus the LOB_FROM_*
+    fallback vars only when the caller isn't supplying its own from_address.
+    Callers should run this BEFORE charging anyone for a letter: previously
+    the charge happened first and a missing env var was only discovered
+    when send() actually ran, so the customer was charged for a letter that
+    a config error prevented from ever reaching Lob."""
+    _require_env("LOB_API_KEY")
+    if not from_address:
+        _from_address()
+
+
 def _require_env(name):
     value = os.environ.get(name, "").strip()
     if not value:
@@ -72,7 +93,15 @@ def _run_request(request):
         except (ValueError, KeyError, TypeError):
             message = error_body or str(e)
         raise LobAPIError(message) from e
+    except TimeoutError as e:
+        # A read timeout after the request already reached Lob - unlike the
+        # errors below, this does NOT mean the letter wasn't sent. socket
+        # timeouts surface as a bare TimeoutError here, not URLError, so
+        # this needs its own except clause - see LobTimeoutError's docstring.
+        raise LobTimeoutError("Timed out waiting for Lob's response.") from e
     except urllib.error.URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise LobTimeoutError("Timed out waiting for Lob's response.") from e
         raise LobAPIError(f"Couldn't reach Lob: {e.reason}") from e
 
 
@@ -99,7 +128,10 @@ def send_letter(to_name, address_line1, city, state, zip_code, html_body, descri
         "from": from_address,
         "file": html_body,
         "color": False,
-        "use_type": "operational",
+        # "Probate Inquiry" / "Cash Offer" are solicitations, not
+        # transactional mail - Lob's own definition of "marketing" is any
+        # mailer sent for marketing, advertising or promotional purposes.
+        "use_type": "marketing",
     }
 
     body = json.dumps(payload).encode("utf-8")
@@ -157,7 +189,7 @@ def send_letter_pdf(to_name, address_line1, city, state, zip_code, pdf_bytes, de
         "from[address_state]": from_address["address_state"],
         "from[address_zip]": from_address["address_zip"],
         "color": "false",
-        "use_type": "operational",
+        "use_type": "marketing",
     }
     if "address_line2" in from_address:
         fields["from[address_line2]"] = from_address["address_line2"]

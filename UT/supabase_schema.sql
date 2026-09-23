@@ -7,8 +7,20 @@ create table if not exists pdf_templates (
     template_name text not null,
     filename text not null,
     field_positions jsonb not null default '{}'::jsonb,
-    uploaded_at timestamptz not null default now()
+    uploaded_at timestamptz not null default now(),
+    owner_email text
 );
+
+-- 2026-09-22 security fix: this table originally had no owner column, so
+-- every signed-in account could list, download, reposition, delete and
+-- mail with every other account's templates. `create table if not exists`
+-- above is a no-op against an already-existing table, so this ALTER runs
+-- the actual migration - safe to re-run, and a no-op once the column
+-- exists. Existing rows get owner_email = NULL, which UT/pipeline_db.py's
+-- get_pdf_templates() treats as admin-only, not "everyone's" - reassign
+-- any pre-existing template you want a specific customer to keep using by
+-- setting its owner_email to that customer's account email.
+alter table pdf_templates add column if not exists owner_email text;
 
 create table if not exists letters_sent (
     id bigint generated always as identity primary key,
@@ -24,7 +36,27 @@ create table if not exists letters_sent (
     preview_url text,
     test_mode boolean not null default true,
     error text,
-    sent_at timestamptz not null default now()
+    sent_at timestamptz not null default now(),
+    sender_email text
+);
+
+-- 2026-09-22 accountability fix: previously nothing recorded who actually
+-- clicked Send - only a stdout print when an admin sent on an agent's
+-- behalf, unsearchable and gone on restart. See the ALTER below for an
+-- already-existing table.
+alter table letters_sent add column if not exists sender_email text;
+
+-- 2026-09-22 accountability fix: a durable trail of who did a consequential
+-- action - template deletion, a price change, a county status change,
+-- granting access - none of which left any record before. See
+-- pipeline_db.record_audit_event().
+create table if not exists audit_log (
+    id bigint generated always as identity primary key,
+    actor_email text,
+    action text not null,
+    target text,
+    details text,
+    created_at timestamptz not null default now()
 );
 
 -- Added 2026-07-27: which counties each logged-in user (by email) is allowed

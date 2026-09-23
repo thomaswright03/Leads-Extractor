@@ -245,115 +245,69 @@ def _search_legacy_attempt(name):
     finally:
         driver.quit()
 
-# Same punctuation set pipeline_db.clean_name() strips before splitting -
-# duplicated here because clean_name() throws away single-letter tokens
-# (middle initials), but that's exactly what extract_lone_initials() needs.
-STRIP_CHARS = '(),"\'.!?;'
-
-# Same set SLK$.py uses to strip a trailing generational suffix before
-# treating the last word as a last name - duplicated here for
-# _strip_nickname_and_suffix()'s use in middle_name_tokens().
-GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
-
-
 def extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
     """The owner record's >=4-char "extra" tokens (spouse name, middle
-    name, etc.) left over after subtracting the deceased's own name."""
+    name, etc.) left over after subtracting the deceased's own name -
+    someone the obituary would independently mention if this really is the
+    right property record."""
     full_tokens = {w.lower() for w in (cleaned_full_name or "").split()}
     owner_tokens = {w.lower() for w in (cleaned_owner_name or "").split()}
     return sorted(owner_tokens - full_tokens)
 
 
-def extract_lone_initials(raw_owner_name):
-    """Single-letter tokens (e.g. the 'G' in 'BANYAI, JACOB G; TR') found in
-    the raw owner-name string - typically a middle initial. clean_name()
-    drops these (it only keeps words >=4 chars), so they have to be pulled
-    from the raw string, not the cleaned one."""
-    cleaned = raw_owner_name or ""
-    for ch in STRIP_CHARS:
-        cleaned = cleaned.replace(ch, "")
-    return sorted({w.lower() for w in cleaned.split() if len(w) == 1 and w.isalpha()})
+# 2026-09-22 accuracy fix: this file used to have check_initial_vs_own_name()
+# (plus its supporting extract_lone_initials()/middle_name_tokens()/
+# _strip_nickname_and_suffix()/GENERATIONAL_SUFFIXES/extract_fuller_name_
+# from_obituary() machinery) that "confirmed" a match whenever a lone
+# initial in the owner record matched the first letter of the deceased's
+# OWN middle name - even retrying against a fuller name pulled out of the
+# obituary text itself when the first try missed. Both variants compare
+# the record to itself, not to anything external: a living namesake (a
+# son, a father, a cousin with the same name in the same county) passes
+# either check identically to the actual deceased person. Removed outright
+# - see confirm_match() below, which requires the obituary text to
+# actually name a co-owner/spouse or the property's own city before
+# anything is called confirmed.
 
 
-def _strip_nickname_and_suffix(name):
-    """Remove a parenthetical or quoted nickname/maiden name (wherever it
-    falls in the string) and a trailing generational suffix, so
-    middle_name_tokens() below isn't fooled into treating a nickname or the
-    real last name as a middle name. Confirmed live on real obituary-listing
-    names: "Theodore Capener (Ted)" was mis-deriving "Capener" (the actual
-    last name) as a middle name, and "Charles Chauncey Hall Jr." was
-    mis-deriving "Hall" as one, both because the trailing token pushed the
-    real last name into the [1:-1] middle slice below."""
-    name = re.sub(r'\([^)]*\)', ' ', name or "")
-    name = re.sub(r'"[^"]*"', ' ', name)
-    parts = name.split()
-    while parts and parts[-1].rstrip('.').lower() in GENERATIONAL_SUFFIXES:
-        parts = parts[:-1]
-    return ' '.join(parts)
+def has_anything_to_check(cleaned_full_name, cleaned_owner_name, city=""):
+    """Whether there's a >=4-char keyword or a real city on file worth
+    searching the obituary text for. If neither exists, no amount of
+    searching could corroborate this specific owner record, so the
+    (expensive) Legacy.com search is skipped."""
+    if extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
+        return True
+    return bool(city) and len(city) >= 4
 
 
-def middle_name_tokens(full_name):
-    """The deceased's own name tokens other than the first and last word -
-    e.g. 'Gregory' out of 'Jacob Gregory Banyai'. This is already known
-    locally from the obituary listing itself, no Legacy.com search needed."""
-    parts = _strip_nickname_and_suffix(full_name).split()
-    if len(parts) <= 2:
-        return []
-    return parts[1:-1]
-
-
-def extract_fuller_name_from_obituary(obituary_text, known_full_name):
-    """The browse-page listing name (what SLKobi.py scrapes) is sometimes
-    missing a middle name that the actual obituary page has - confirmed
-    live: the listing had "Theodore Capener (Ted)" while the obituary
-    itself opens with "Theodore (Ted) Robert Capener". Legacy.com's
-    obituary pages open with the deceased's fuller printed name on its own
-    line, before the birth-death year range, so pull that line (only if it
-    shares a word with the name we already know, as a sanity check against
-    grabbing an unrelated line) for a second, better-informed middle-name
-    check."""
-    if not obituary_text:
-        return None
-    known_tokens = {w.lower() for w in re.sub(r'[()"]', ' ', known_full_name or "").split()}
-    for line in obituary_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Only the very first non-empty line is ever a candidate - it's the
-        # name line every time this succeeds, and checking further lines
-        # risks matching an unrelated sentence that happens to share a word.
-        line_tokens = {w.lower() for w in re.sub(r'[()"]', ' ', line).split()}
-        if len(line) < 80 and known_tokens & line_tokens:
-            return line
-        return None
-    return None
-
-
-def check_initial_vs_own_name(owner_name, full_name):
-    """A lone initial in the owner record (e.g. the 'G' in 'JACOB G') very
-    often just stands for the deceased's own middle name, which we already
-    have from the obituary listing - no search needed to confirm that.
-    Returns (initial, matched_word) if a lone initial matches the first
-    letter of one of the deceased's own middle name(s), else None."""
-    lone_initials = extract_lone_initials(owner_name)
-    if not lone_initials:
-        return None
-    for word in middle_name_tokens(full_name):
-        lower_word = word.lower()
-        if lower_word and lower_word[0] in lone_initials:
-            return lower_word[0], word
-    return None
-
-
-def confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text):
-    """Check whether the owner record's >=4-char "extra" word (spouse
-    name, middle name, etc, left over after subtracting the deceased's own
-    name) shows up as a literal substring in the obituary text."""
+def confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text, city=""):
+    """A lead is confirmed only when the obituary text itself corroborates
+    THIS SPECIFIC property record - never by comparing the record to
+    itself. Two independent signals count:
+      1. A co-owner/spouse name left over in the owner record (see
+         extract_keyword_candidates) appears as a whole word in the
+         obituary text.
+      2. Failing that, the property's own on-file city appears as a whole
+         word in the obituary text (e.g. "...of Salt Lake City, Utah") -
+         real corroboration even for a single-owner record with no
+         separate co-owner name to check.
+    Whole-word matching (\\b...\\b), not a bare substring test, so "mark"
+    doesn't match inside "remarkable" and "june" doesn't match inside
+    "junction" - the substring version of this check produced exactly
+    those false hits. (A name that IS a common word or a month - an actual
+    "June" - can still coincidentally match its literal use elsewhere in
+    the text; that ambiguity is real and not something a word-boundary
+    check can resolve.)"""
     keyword_candidates = extract_keyword_candidates(cleaned_full_name, cleaned_owner_name)
-    print(f"  Searching obituary for: {', '.join(keyword_candidates) if keyword_candidates else '(none)'}")
+    print(f"  Searching obituary for: {', '.join(keyword_candidates) if keyword_candidates else '(none)'}"
+          + (f" or city '{city}'" if city else ""))
 
     haystack = (obituary_text or "").lower()
-    return sorted(kw for kw in keyword_candidates if kw in haystack)
+    matched = [kw for kw in keyword_candidates if re.search(rf"\b{re.escape(kw)}\b", haystack)]
+    if not matched and city and len(city) >= 4:
+        if re.search(rf"\b{re.escape(city.lower())}\b", haystack):
+            matched = [f"city:{city}"]
+    return sorted(matched)
 
 
 if __name__ == "__main__":
@@ -388,24 +342,8 @@ if __name__ == "__main__":
                     row["Posted Date"] = posted_date or ""
                 confirmed_rows.append(row)
 
-            # Cheapest check first, before any Legacy.com search: does the
-            # assessor record's lone initial just match the deceased's own
-            # already-known middle name? If so, that's confirmed on its own
-            # - no need to spend a search on it.
-            own_name_hit = check_initial_vs_own_name(owner_name, full_name)
-            if own_name_hit:
-                initial, hit_word = own_name_hit
-                confirm(
-                    f"initial {initial.upper()} matches deceased's own name '{hit_word}' (no Legacy.com search needed)",
-                    pipeline_db.get_obituary_url(full_name) or "",
-                )
-                continue
-
-            lone_initials = extract_lone_initials(owner_name)
-            keyword_candidates = extract_keyword_candidates(cleaned_full_name, cleaned_owner_name)
-
-            if not lone_initials and not keyword_candidates:
-                print(f"Skipping obituary search for '{full_name}' / owner '{owner_name}' — no keyword to check against.")
+            if not has_anything_to_check(cleaned_full_name, cleaned_owner_name, city):
+                print(f"Skipping obituary search for '{full_name}' / owner '{owner_name}' — no keyword or city to check against.")
                 pipeline_db.set_match_confirmation(match_id, False, "")
                 print(f"Not confirmed: {full_name} / owner '{owner_name}' — nothing to check against the obituary")
                 continue
@@ -416,27 +354,7 @@ if __name__ == "__main__":
                 pipeline_db.set_obituary_url(full_name, url)
 
             obituary_text, obituary_url = obituary_cache[full_name]
-
-            # The browse-page listing name can be missing a middle name that
-            # the actual obituary page has - confirmed live: the listing had
-            # "Theodore Capener (Ted)" while the obituary itself opens with
-            # "Theodore (Ted) Robert Capener", so "THEODORE R" in the county
-            # record went unconfirmed even though "R" is really his own
-            # middle initial. Retry the middle-initial check against that
-            # fuller name before falling back to the spouse/keyword check.
-            if lone_initials:
-                fuller_name = extract_fuller_name_from_obituary(obituary_text, full_name)
-                if fuller_name:
-                    retry_hit = check_initial_vs_own_name(owner_name, fuller_name)
-                    if retry_hit:
-                        initial, hit_word = retry_hit
-                        confirm(
-                            f"initial {initial.upper()} matches deceased's own name '{hit_word}' (from obituary: \"{fuller_name}\")",
-                            obituary_url,
-                        )
-                        continue
-
-            matched_keywords = confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text)
+            matched_keywords = confirm_match(cleaned_full_name, cleaned_owner_name, obituary_text, city)
             reason = ", ".join(matched_keywords)
 
             pipeline_db.set_match_confirmation(match_id, bool(reason), reason)
@@ -444,9 +362,31 @@ if __name__ == "__main__":
             if reason:
                 confirm(reason, obituary_url)
             else:
-                print(f"Not confirmed: {full_name} / owner '{owner_name}' — no corroborating keyword or initial found in obituary")
+                print(f"Not confirmed: {full_name} / owner '{owner_name}' — no corroborating keyword or city found in obituary")
 
         print(f"\nChecked {len(matches)} candidate matches against obituary text.")
+
+        # 2026-09-22 accuracy fix: if the same decedent still ended up with
+        # more than one CONFIRMED parcel under different owner names, that's
+        # not corroboration - it's SLK$.py's own loose first-name-prefix
+        # search turning up more than one plausible property and this
+        # file's keyword/city check happening to clear more than one of
+        # them. There's no reliable way to guess which is actually right,
+        # so none of them ship as confirmed - dropped here rather than
+        # guessed at. A real "needs human review" queue for cases like this
+        # is a reasonable next step, not yet built.
+        rows_by_name = {}
+        for row in confirmed_rows:
+            rows_by_name.setdefault(row["Full Name"], []).append(row)
+        ambiguous_names = {
+            name for name, rows in rows_by_name.items()
+            if len({r["Owner Name"] for r in rows}) > 1
+        }
+        if ambiguous_names:
+            for name in sorted(ambiguous_names):
+                owners = sorted({r["Owner Name"] for r in rows_by_name[name]})
+                print(f"Ambiguous: '{name}' confirmed against {len(owners)} different owner records ({'; '.join(owners)}) - holding all of them back rather than guessing.")
+            confirmed_rows = [row for row in confirmed_rows if row["Full Name"] not in ambiguous_names]
 
         written_paths = []
 

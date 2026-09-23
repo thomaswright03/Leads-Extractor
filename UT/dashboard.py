@@ -5,10 +5,12 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
 import uuid
 import webbrowser
 from datetime import datetime
+from urllib.parse import urlsplit
 
 import pandas as pd
 
@@ -51,6 +53,18 @@ def is_map_only(email):
     editor who isn't also a full admin."""
     return is_map_editor(email) and not is_admin(email)
 
+
+def can_use_pdf_template(template, requester_email):
+    """A template belongs to whoever uploaded/generated it; an admin can
+    use any of them (the operator view). A legacy template with no owner
+    on record (owner_email NULL, from before this check existed) is
+    admin-only until reassigned - never treated as "everyone's". See the
+    2026-09-22 cross-customer-template security fix."""
+    if is_admin(requester_email):
+        return True
+    owner = template.get("ownerEmail") if template else None
+    return bool(owner) and bool(requester_email) and owner.strip().lower() == requester_email.strip().lower()
+
 # For The Map (see /map, /api/map/*): the only counties with a real,
 # functioning pipeline folder are these three - everything else on the map
 # is either "not started" or manually flagged "building" (see
@@ -77,6 +91,23 @@ COUNTY_FOLDER_TO_FIPS = {
 # topojson), but pricing_plans is keyed by county folder - this is how
 # handle_set_county_price resolves one from the other.
 COUNTY_FIPS_TO_FOLDER = {fips: folder for folder, fips in COUNTY_FOLDER_TO_FIPS.items()}
+
+
+def get_offline_sold_county_folders():
+    """Folder keys of every county marked 'sold' on the internal Map tool
+    (pipeline_db.set_manual_county_status) - a sale closed outside the
+    self-serve Stripe flow. Merge this with pipeline_db.get_taken_counties()
+    (real Stripe subscriptions) everywhere "is this county available"
+    matters: previously only the Stripe-subscription check was consulted,
+    so marking a county sold on the Map didn't take it off the online
+    market, and it could be bought a second time through checkout -
+    reproduced in the 2026-09-22 security review. See handle_set_county_status."""
+    manual_statuses = pipeline_db.get_manual_county_statuses()
+    return {
+        COUNTY_FIPS_TO_FOLDER[fips]
+        for fips, entry in manual_statuses.items()
+        if entry.get("status") == "sold" and fips in COUNTY_FIPS_TO_FOLDER
+    }
 
 # In-memory session store (session_token -> {"email", "expires_at"}). Lives
 # only as long as this process - a restart just means everyone logs in
@@ -156,6 +187,30 @@ LETTER_TEMPLATES = [
 ]
 
 
+def dumps_for_html(data):
+    """json.dumps() does not escape "<", ">" or "&", so a string value
+    containing "</script>" - e.g. a customer-controlled PDF template name -
+    ends the <script> block early and gets whatever follows parsed as live
+    HTML/JavaScript in every signed-in visitor's browser, including the
+    admin's. Reproduced live in the 2026-09-22 security review: a template
+    name containing a script payload ran in the admin's session and
+    repriced a county in Stripe. Escaping <, > and & as \\uXXXX (plus the
+    two JS line terminators U+2028/U+2029, which are valid JSON string
+    characters but illegal unescaped inside a JS string literal) makes the
+    payload inert outside of JSON.parse, while still parsing back to the
+    exact same value. Always use this - never a bare json.dumps() - for any
+    JSON embedded directly into an HTML response, whether inside a
+    <script type="application/json"> block or as an inline JS literal."""
+    return (
+        json.dumps(data)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
+
+
 def build_letter_html(message):
     """Wraps the (already merge-field-substituted) letter body in a minimal
     HTML page for Lob's `file` field. Lob renders supplied HTML to the
@@ -220,16 +275,38 @@ def _parse_multipart(content_type, body):
     return fields
 
 
-def handle_upload_pdf_template(fields):
+MAX_TEMPLATE_NAME_LENGTH = 120
+
+
+def _validate_template_name_field(value, field_label):
+    """Company/template names are embedded verbatim into every signed-in
+    user's dashboard (see dumps_for_html() for why that's now safe against
+    breaking out of the page), but a 500-character name or one full of
+    control characters is still worth rejecting outright rather than
+    silently accepting - defense in depth, not the primary fix."""
+    value = (value or "").strip()
+    if not value:
+        return None, f"{field_label} is required."
+    if len(value) > MAX_TEMPLATE_NAME_LENGTH:
+        return None, f"{field_label} must be {MAX_TEMPLATE_NAME_LENGTH} characters or fewer."
+    if any(ord(ch) < 0x20 for ch in value):
+        return None, f"{field_label} can't contain control characters."
+    return value, None
+
+
+def handle_upload_pdf_template(fields, owner_email):
     """Stores a company-submitted PDF letter design on disk and records it
     in pipeline_cache.db, so it shows up as a send option alongside the
-    built-in merge-field templates."""
-    company_name = str(fields.get("companyName", "")).strip()
-    template_name = str(fields.get("templateName", "")).strip()
+    built-in merge-field templates. owner_email scopes it to whoever
+    uploaded it - see the 2026-09-22 cross-customer-template fix."""
+    company_name, error = _validate_template_name_field(str(fields.get("companyName", "")), "Company name")
+    if error:
+        return 400, {"error": error}
+    template_name, error = _validate_template_name_field(str(fields.get("templateName", "")), "Template name")
+    if error:
+        return 400, {"error": error}
     file_field = fields.get("file")
 
-    if not company_name or not template_name:
-        return 400, {"error": "Company name and template name are required."}
     if not isinstance(file_field, dict) or not file_field.get("content"):
         return 400, {"error": "No PDF file was uploaded."}
     if not file_field.get("filename", "").lower().endswith(".pdf"):
@@ -240,21 +317,25 @@ def handle_upload_pdf_template(fields):
     with open(os.path.join(PDF_TEMPLATES_DIR, filename), "wb") as f:
         f.write(file_field["content"])
 
-    template_id = pipeline_db.add_pdf_template(company_name, template_name, filename)
+    template_id = pipeline_db.add_pdf_template(company_name, template_name, filename, owner_email=owner_email)
     return 200, {"id": template_id, "filename": filename}
 
 
-def handle_generate_pdf_template(fields):
+def handle_generate_pdf_template(fields, owner_email):
     """Builds a designed PDF from the template-creation wizard's answers
     (see pdf_merge.generate_letter_pdf) and registers it exactly like an
     uploaded PDF template - including the name-placement position, computed
     directly from the layout instead of requiring the usual manual
     click-to-place step."""
-    company_name = str(fields.get("companyName", "")).strip()
-    template_name = str(fields.get("templateName", "")).strip()
-    business_name = str(fields.get("businessName", "")).strip()
-    if not company_name or not template_name or not business_name:
-        return 400, {"error": "Business name and template name are required."}
+    company_name, error = _validate_template_name_field(str(fields.get("companyName", "")), "Company name")
+    if error:
+        return 400, {"error": error}
+    template_name, error = _validate_template_name_field(str(fields.get("templateName", "")), "Template name")
+    if error:
+        return 400, {"error": error}
+    business_name, error = _validate_template_name_field(str(fields.get("businessName", "")), "Business name")
+    if error:
+        return 400, {"error": error}
 
     angles = [a for a in str(fields.get("angles", "")).split(",") if a]
     logo_field = fields.get("logo")
@@ -274,22 +355,23 @@ def handle_generate_pdf_template(fields):
         )
     except Exception as e:
         print(f"Unexpected error generating PDF template: {e}")
-        return 500, {"error": "Couldn't generate the PDF - check the terminal running dashboard.py."}
+        return 500, {"error": "Couldn't generate the PDF. Please try again in a minute."}
 
     os.makedirs(PDF_TEMPLATES_DIR, exist_ok=True)
     filename = f"{uuid.uuid4().hex}.pdf"
     with open(os.path.join(PDF_TEMPLATES_DIR, filename), "wb") as f:
         f.write(pdf_bytes)
 
-    template_id = pipeline_db.add_pdf_template(company_name, template_name, filename)
+    template_id = pipeline_db.add_pdf_template(company_name, template_name, filename, owner_email=owner_email)
     pipeline_db.set_pdf_template_field_position(template_id, "owner_name", name_x_ratio, name_y_ratio)
     return 200, {"id": template_id, "filename": filename}
 
 
-def handle_set_pdf_template_field(payload):
+def handle_set_pdf_template_field(payload, requester_email):
     """Records where on the page (as a ratio, not absolute points) the
     owner/recipient name should be stamped for this PDF template - set via
-    the click-to-place preview in the admin panel."""
+    the click-to-place preview in the admin panel. Scoped to the template's
+    owner (or an admin) - see can_use_pdf_template()."""
     try:
         template_id = int(payload.get("id"))
         x_ratio = float(payload.get("xRatio"))
@@ -302,22 +384,32 @@ def handle_set_pdf_template_field(payload):
     if not (0 <= x_ratio <= 1 and 0 <= y_ratio <= 1):
         return 400, {"error": "Position must be within the page."}
 
+    template = pipeline_db.get_pdf_template(template_id)
+    # Same 404 whether the template doesn't exist or just isn't yours -
+    # doesn't confirm to a caller which one it is.
+    if not template or not can_use_pdf_template(template, requester_email):
+        return 404, {"error": "Template not found."}
+
     if not pipeline_db.set_pdf_template_field_position(template_id, field, x_ratio, y_ratio):
         return 404, {"error": "Template not found."}
     return 200, {"ok": True}
 
 
-def handle_delete_pdf_template(payload):
+def handle_delete_pdf_template(payload, requester_email):
     try:
         template_id = int(payload.get("id"))
     except (TypeError, ValueError):
         return 400, {"error": "Invalid template id."}
 
     template = pipeline_db.get_pdf_template(template_id)
-    if not template:
+    if not template or not can_use_pdf_template(template, requester_email):
         return 404, {"error": "Template not found."}
 
     pipeline_db.delete_pdf_template(template_id)
+    pipeline_db.record_audit_event(
+        requester_email, "delete_pdf_template", target=str(template_id),
+        details=f"{template['companyName']} - {template['templateName']}",
+    )
     try:
         os.remove(os.path.join(PDF_TEMPLATES_DIR, template["filename"]))
     except OSError:
@@ -370,7 +462,7 @@ def handle_map_status():
     return 200, _compute_all_county_statuses()
 
 
-def handle_set_county_status(payload, restrict_to_marking_sold=False):
+def handle_set_county_status(payload, restrict_to_marking_sold=False, actor_email=None):
     """restrict_to_marking_sold is set for a session that's a map editor but
     not a full admin (see is_map_only) - it can only flip a county that's
     currently "ready to sell" to "sold", nothing else, regardless of what a
@@ -425,10 +517,11 @@ def handle_set_county_status(payload, restrict_to_marking_sold=False):
         customer_phone=customer_phone or None,
         notes=notes or None,
     )
+    pipeline_db.record_audit_event(actor_email, "set_county_status", target=fips, details=status)
     return 200, {"ok": True}
 
 
-def handle_set_county_price(payload):
+def handle_set_county_price(payload, actor_email=None):
     """Changes a county's standing monthly price - available/ready-to-sell
     counties only (see below), from The Map's county panel. Adam (or any
     full admin) sometimes closes a deal above the listed price; this is how
@@ -465,6 +558,7 @@ def handle_set_county_price(payload):
         billing.update_plan_price("county", folder, price_cents)
     except billing.BillingError as e:
         return 400, {"error": str(e)}
+    pipeline_db.record_audit_event(actor_email, "set_county_price", target=folder, details=f"${price_dollars:.2f}/mo")
     return 200, {"ok": True, "priceCents": price_cents}
 
 
@@ -1214,6 +1308,7 @@ TEMPLATE = """<!doctype html>
   .badge.sent { background: var(--confirmed-bg); color: var(--confirmed-ink); }
   .badge.failed { background: #fbe4e4; color: #a13a3a; }
   .badge.not-sent { background: var(--review-bg); color: var(--review-ink); }
+  .badge.unknown { background: #fdf0d5; color: #8a5a00; }
   button.send-letter-btn {
     border: 1px solid var(--gold);
     background: transparent;
@@ -2320,7 +2415,7 @@ TEMPLATE = """<!doctype html>
 </div>
 
 <footer>
-  Generated locally from pipeline_cache.db &middot; parcel and obituary links open the original source for verification before contacting anyone.
+  Updated automatically every night &middot; parcel and obituary links open the original source for verification before contacting anyone.
 </footer>
 
 <script id="lead-data" type="application/json">__LEAD_DATA_JSON__</script>
@@ -2458,19 +2553,25 @@ TEMPLATE = """<!doctype html>
 
   function letterStatusLabel(lead) {
     if (!lead.letter) return 'not-sent';
-    return lead.letter.status === 'sent' ? 'sent' : 'failed';
+    if (lead.letter.status === 'sent') return 'sent';
+    if (lead.letter.status === 'unknown') return 'unknown';
+    return 'failed';
   }
 
   function letterCell(lead) {
     const td = el('td', 'letter-cell');
     const label = letterStatusLabel(lead);
-    const badgeText = label === 'sent' ? 'Sent' : label === 'failed' ? 'Failed' : 'Not Sent';
+    const badgeText = label === 'sent' ? 'Sent'
+      : label === 'unknown' ? 'Charged, Unconfirmed'
+      : label === 'failed' ? 'Failed'
+      : 'Not Sent';
     const badge = el('span', `badge ${label}`, badgeText);
     td.appendChild(badge);
     if (lead.letter && lead.letter.sentAt) {
       td.appendChild(el('span', 'owner', lead.letter.sentAt));
     }
-    const btn = el('button', 'send-letter-btn', lead.letter ? 'Resend Letter' : 'Send Letter');
+    const btnText = label === 'unknown' ? 'Resend Anyway' : lead.letter ? 'Resend Letter' : 'Send Letter';
+    const btn = el('button', 'send-letter-btn', btnText);
     btn.type = 'button';
     btn.addEventListener('click', () => openLetterModal(lead));
     td.appendChild(btn);
@@ -2607,10 +2708,13 @@ TEMPLATE = """<!doctype html>
   }
 
   function bulkEligibleLeads() {
+    // 'unknown' (charged, delivery unconfirmed after a Lob timeout) is
+    // excluded from bulk re-sends the same as 'sent' - it needs a human to
+    // check on it, not an automatic second letter and second charge.
     return confirmed.filter(l =>
       isWithinLastNDays(l.dateAddedRaw, 7) &&
       hasCompleteAddress(l) &&
-      letterStatusLabel(l) !== 'sent'
+      !['sent', 'unknown'].includes(letterStatusLabel(l))
     );
   }
 
@@ -3098,6 +3202,15 @@ TEMPLATE = """<!doctype html>
     if (e.target === placementBackdrop) closePlacementModal();
   });
 
+  // Escape closes whichever modal is currently open - none of the three
+  // backdrops above had a keyboard way to dismiss before this.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (modalBackdrop.classList.contains('open')) closeLetterModal();
+    if (bulkBackdrop.classList.contains('open')) closeBulkModal();
+    if (placementBackdrop.classList.contains('open')) closePlacementModal();
+  });
+
   async function deletePdfTemplate(id) {
     if (!confirm('Delete this PDF template? This cannot be undone.')) return;
     try {
@@ -3136,7 +3249,18 @@ TEMPLATE = """<!doctype html>
     appContent.style.display = 'block';
   }
 
-  if (SERVER_AUTHENTICATED) {
+  // A brand-new signup is already logged in (see _handle_signup) by the
+  // time Stripe redirects back here, but county access is granted
+  // separately and asynchronously by Stripe's webhook - so hold off
+  // unlocking the real dashboard until that's confirmed (see the
+  // claim-signup-session polling below), instead of briefly showing an
+  // authenticated dashboard with no county access yet.
+  const checkoutParams = new URLSearchParams(window.location.search);
+  const pendingSignupKey = SERVER_AUTHENTICATED && checkoutParams.get('checkout') === 'success'
+    ? checkoutParams.get('key')
+    : null;
+
+  if (SERVER_AUTHENTICATED && !pendingSignupKey) {
     unlock();
   }
 
@@ -3178,13 +3302,11 @@ TEMPLATE = """<!doctype html>
   }
 
   // --- Claim a signup session after returning from Stripe checkout ---
-  // A brand-new signup's Supabase account isn't created until Stripe
-  // confirms payment (see billing.handle_webhook_event), which can land a
-  // moment after this redirect - so this polls rather than assuming the
-  // account (and a session for it) is ready the instant the browser is
-  // back on our own domain.
-  const signupToken = !SERVER_AUTHENTICATED && new URLSearchParams(window.location.search).get('signup_token');
-  if (signupToken) {
+  // The account and session already exist by this point (created
+  // synchronously in _handle_signup, before checkout even started) - the
+  // only thing still async is Stripe's webhook granting the county access
+  // just paid for, so this polls for that rather than for the account.
+  if (pendingSignupKey) {
     const loginFormEl = document.getElementById('login-form');
     const signupFormEl = document.getElementById('signup-form');
     const pendingCard = document.getElementById('checkout-pending-card');
@@ -3201,14 +3323,14 @@ TEMPLATE = """<!doctype html>
         const response = await fetch('/api/claim-signup-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: signupToken }),
+          body: JSON.stringify({ key: pendingSignupKey }),
         });
         if (response.status === 200) {
           window.location.href = '/';
           return;
         }
-        if (response.status === 404) {
-          pendingError.textContent = 'This signup link has expired or was already used.';
+        if (response.status === 401) {
+          pendingError.textContent = 'Payment received! Please log in with the email and password you just created to see your new county.';
           pendingError.classList.add('show');
           return;
         }
@@ -3218,7 +3340,7 @@ TEMPLATE = """<!doctype html>
       if (attempts < maxAttempts) {
         setTimeout(tryClaimSession, 1500);
       } else {
-        pendingError.textContent = 'Payment received! Finishing setup is taking longer than expected - log in with the email and password you just created.';
+        pendingError.textContent = 'Payment received! Finishing setup is taking longer than expected - refresh in a moment, or contact support if this persists.';
         pendingError.classList.add('show');
       }
     };
@@ -3618,7 +3740,10 @@ def build_dashboard_html(authenticated=False, email=None):
                 "fieldPositions": t["fieldPositions"],
                 "uploadedAt": t["uploadedAt"],
             }
-            for t in pipeline_db.get_pdf_templates()
+            # Admin sees every account's templates (the operator view);
+            # anyone else sees only their own - see the 2026-09-22
+            # cross-customer-template fix.
+            for t in pipeline_db.get_pdf_templates(None if is_admin(email) else email)
         ]
     else:
         confirmed_leads, confirmed_count, lead_pursued_rate, pdf_templates = [], 0, "", []
@@ -3631,7 +3756,7 @@ def build_dashboard_html(authenticated=False, email=None):
     # taken county stays in the list (marked taken) rather than disappearing
     # - showing the full footprint of counties is a deliberate marketing
     # choice, not just what's currently purchasable.
-    taken_counties = pipeline_db.get_taken_counties()
+    taken_counties = pipeline_db.get_taken_counties() | get_offline_sold_county_folders()
     # Keyed off the full COUNTIES list (not visible_counties, which is
     # auth-filtered) since signup itself is shown to logged-out visitors -
     # this is just how the signup form knows which state each plan
@@ -3672,7 +3797,7 @@ def build_dashboard_html(authenticated=False, email=None):
             "contact your administrator to get access."
         )
     else:
-        confirmed_empty_message = "No confirmed leads yet &mdash; run the pipeline to populate this list."
+        confirmed_empty_message = "No confirmed leads yet for this county &mdash; new matches are added automatically every night."
 
     return (TEMPLATE
         .replace("__GENERATED_AT__", datetime.now().strftime("%B %d, %Y at %-I:%M %p"))
@@ -3687,25 +3812,62 @@ def build_dashboard_html(authenticated=False, email=None):
             '<a href="/map" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline;">The Map</a>'
             if is_admin(email) else "",
         )
-        .replace("__LEAD_DATA_JSON__", json.dumps(lead_data))
+        .replace("__LEAD_DATA_JSON__", dumps_for_html(lead_data))
     )
 
 
 REQUIRED_SEND_FIELDS = ["fullName", "county", "address", "city", "state", "zip", "templateId"]
 
 
+# Guards against two concurrent requests (a double-click, two open tabs, or
+# a client retry) both sending a letter for the same lead - reproduced as 2
+# Stripe charges and 2 Lob letters for one lead. ThreadingHTTPServer (see
+# main() below) really does run requests on separate threads, so a plain
+# "check letters_sent, then send" without a lock has a real race window.
+_SENDS_IN_PROGRESS = set()
+_SENDS_IN_PROGRESS_LOCK = threading.Lock()
+
+
+def _try_reserve_send(key):
+    with _SENDS_IN_PROGRESS_LOCK:
+        if key in _SENDS_IN_PROGRESS:
+            return False
+        _SENDS_IN_PROGRESS.add(key)
+        return True
+
+
+def _release_send(key):
+    with _SENDS_IN_PROGRESS_LOCK:
+        _SENDS_IN_PROGRESS.discard(key)
+
+
 def handle_send_letter(payload, sender_email=None):
+    """Reserves an in-flight lock for this exact lead before doing anything
+    else, so a concurrent duplicate request is rejected immediately rather
+    than racing _handle_send_letter_inner - see _SENDS_IN_PROGRESS above."""
+    send_key = (
+        str(payload.get("county", "")),
+        str(payload.get("fullName", "")),
+        str(payload.get("parcelId", "")),
+    )
+    if not _try_reserve_send(send_key):
+        return 409, {"error": "This letter is already being sent - please wait a moment and check its status before retrying."}
+    try:
+        return _handle_send_letter_inner(payload, sender_email)
+    finally:
+        _release_send(send_key)
+
+
+def _handle_send_letter_inner(payload, sender_email=None):
     """Validates the request, sends via Lob, and records the attempt
     (success or failure) in pipeline_cache.db. Returns (http_status, body_dict).
 
-    The Lob "from" address is the mailing profile of the county's owner -
-    not necessarily sender_email - so an admin sending on an agent's behalf
-    (see is_admin() / get_allowed_county_folders()) still puts that agent's
-    own return address on the letter, not the admin's. For a normal agent
-    sending their own county's letters the two are the same email, so this
-    is unchanged from before. Falls back to mailer.py's LOB_FROM_* env vars
-    (Summit Sotheby's, the original single-operator identity) when the
-    county has no owner with a profile."""
+    An admin sending in a county owned by someone else is refused outright,
+    below - so by the time this reaches the Lob "from" address lookup,
+    sender_email and owner_email always agree (or owner_email is None, an
+    unclaimed county an admin is free to test with). Falls back to
+    mailer.py's LOB_FROM_* env vars (Summit Sotheby's, the original
+    single-operator identity) when the county has no owner with a profile."""
     template_id = str(payload.get("templateId", "")).strip()
     is_pdf_template = template_id.startswith("pdf:")
 
@@ -3734,7 +3896,18 @@ def handle_send_letter(payload, sender_email=None):
 
     owner_email = pipeline_db.get_county_owner(county) if county else None
     if sender_email and owner_email and sender_email.strip().lower() != owner_email.strip().lower():
-        print(f"{sender_email} sent a letter for county '{county}' on behalf of {owner_email}.")
+        # Previously allowed - an admin could send in any county, printing
+        # that agent's return address and charging that agent's card,
+        # without the agent ever acting or consenting. Blocked outright
+        # (the simpler of the two fixes the 2026-09-22 review offered,
+        # since a full approval workflow is a much bigger feature): an
+        # admin can still send for an unclaimed county (owner_email is
+        # None, handled below - that's free and affects no one else's
+        # card), just not on a specific agent's behalf.
+        return 403, {
+            "error": "You can't send a letter in a county owned by another account. "
+                     "Ask that agent to send it themselves.",
+        }
 
     from_address = None
     mailing_profile = pipeline_db.get_mailing_profile(owner_email) if owner_email else None
@@ -3756,6 +3929,11 @@ def handle_send_letter(payload, sender_email=None):
             return 400, {"error": "Invalid PDF template id."}
         pdf_template = pipeline_db.get_pdf_template(pdf_row_id)
         if not pdf_template:
+            return 400, {"error": "That PDF template no longer exists."}
+        # Scoped to the template's owner (or an admin) - see the
+        # 2026-09-22 cross-customer-template fix. Same message as "doesn't
+        # exist" so this doesn't confirm someone else's template id is real.
+        if not can_use_pdf_template(pdf_template, sender_email):
             return 400, {"error": "That PDF template no longer exists."}
         try:
             with open(os.path.join(PDF_TEMPLATES_DIR, pdf_template["filename"]), "rb") as f:
@@ -3797,6 +3975,15 @@ def handle_send_letter(payload, sender_email=None):
                 from_address=from_address,
             )
 
+    try:
+        mailer.validate_send_config(from_address)
+    except mailer.MailerConfigError as e:
+        # Checked before any charge is made - previously a missing env var
+        # was only discovered inside send(), by which point the letter fee
+        # had already been charged (see the comment that used to be on the
+        # MailerConfigError branch below, which was simply wrong about that).
+        return 400, {"error": str(e)}
+
     # The monthly county fee is for data access - sending a letter is a
     # separate, optional, per-use charge on top, billed to the same card
     # the county owner's subscription already uses. An admin testing an
@@ -3819,19 +4006,42 @@ def handle_send_letter(payload, sender_email=None):
     try:
         result = send()
     except mailer.MailerConfigError as e:
-        # Nothing was charged for a config error (it's raised before ever
-        # calling Lob), so no refund needed here.
+        # validate_send_config() above should already have caught this
+        # before any charge was made; kept as a backstop in case send()
+        # hits an env var that check didn't cover.
         return 400, {"error": str(e)}
+    except mailer.LobTimeoutError as e:
+        # Unlike a normal LobAPIError below, a timeout doesn't mean the
+        # letter wasn't sent - Lob may have received and even printed it.
+        # Refunding here could double-pay a household with mail that DID
+        # go out; not refunding could charge for one that didn't. Neither
+        # guess is safe, so: keep the charge, record it as "unknown" (not
+        # "sent", not "failed") so it isn't silently re-offered for a
+        # second send, and tell the agent plainly what's known and what
+        # isn't - this needs a human to check Lob's dashboard for the
+        # description text used above, not an automatic resend.
+        pipeline_db.record_letter_sent(
+            county, full_name, owner_name, parcel_id, template_id, message,
+            status="unknown", test_mode=mailer.is_test_mode(), error=str(e), sender_email=sender_email,
+        )
+        return 502, {
+            "error": (
+                "We couldn't confirm whether this letter was sent. "
+                "Your card was charged; we'll check with Lob and refund if it "
+                "didn't go out. Please don't resend it in the meantime."
+            ),
+        }
     except mailer.LobAPIError as e:
         # The letter fee was already charged above (has to be, so a failed
-        # charge blocks the send) - since Lob then failed to actually mail
-        # anything, refund it rather than leave the agent paying for a
-        # letter that never went out.
+        # charge blocks the send) - since Lob then explicitly rejected the
+        # request (not a timeout - see LobTimeoutError above), nothing was
+        # mailed, so it's safe to refund rather than leave the agent paying
+        # for a letter that never went out.
         if letter_charge_id:
             billing.refund_letter_charge(letter_charge_id)
         pipeline_db.record_letter_sent(
             county, full_name, owner_name, parcel_id, template_id, message,
-            status="failed", test_mode=mailer.is_test_mode(), error=str(e),
+            status="failed", test_mode=mailer.is_test_mode(), error=str(e), sender_email=sender_email,
         )
         return 502, {"error": str(e)}
 
@@ -3842,6 +4052,7 @@ def handle_send_letter(payload, sender_email=None):
         expected_delivery_date=result.get("expected_delivery_date", ""),
         preview_url=result.get("url", ""),
         test_mode=mailer.is_test_mode(),
+        sender_email=sender_email,
     )
     return 200, {
         "lobLetterId": result.get("id", ""),
@@ -3883,6 +4094,23 @@ LEGAL_EFFECTIVE_DATE = "August 4, 2026"
 LEGAL_ENTITY_NAME = "Wright AI Solutions, LLC"
 LEGAL_CONTACT_EMAIL = "t@thomasewright.com"
 LEGAL_GOVERNING_STATE = "Utah"
+
+NOT_FOUND_HTML = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page Not Found - Data Lead Sell</title>
+<style>{LEGAL_PAGE_STYLE}</style>
+</head>
+<body>
+<div class="wrap" style="text-align: center; padding-top: 96px;">
+<h1>Page Not Found</h1>
+<p>There&rsquo;s nothing at this address.</p>
+<a href="/">&larr; Back to Data Lead Sell</a>
+</div>
+</body>
+</html>"""
 
 TERMS_HTML = f"""<!doctype html>
 <html lang="en">
@@ -4846,6 +5074,9 @@ MAP_HTML = """<!doctype html>
       priceError.classList.add('show');
       return;
     }
+    if (!confirm(`Change ${currentPanelName || 'this county'}'s price to $${priceDollars.toFixed(2)}/mo? This takes effect immediately for new signups.`)) {
+      return;
+    }
     savePriceBtn.disabled = true;
     try {
       const resp = await fetch('/api/map/set-price', {
@@ -5165,6 +5396,19 @@ STATS_HTML = """<!doctype html>
 
 
 class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
+    def end_headers(self):
+        # Baseline security headers on every response - every route already
+        # calls end_headers() right before writing its body, so this is the
+        # one place that reaches all of them. A full Content-Security-Policy
+        # would also help (it would have blocked the 2026-09-22 stored-XSS
+        # finding even without the dumps_for_html() fix), but this app's
+        # pages are full of inline <script>/<style> with no nonce plumbing
+        # yet - doing that safely is a larger follow-up, not bundled here.
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        super().end_headers()
+
     def do_GET(self):
         if self.path in ("/terms", "/privacy"):
             body = (TERMS_HTML if self.path == "/terms" else PRIVACY_HTML).encode("utf-8")
@@ -5213,7 +5457,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 ),
                 "dailyStats": compute_daily_lead_stats(load_all_confirmed_leads(visible_counties)),
             }
-            page = STATS_HTML.replace("__STATS_DATA_JSON__", json.dumps(stats_data))
+            page = STATS_HTML.replace("__STATS_DATA_JSON__", dumps_for_html(stats_data))
             body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -5232,7 +5476,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             page = (
                 MAP_HTML
                 .replace("__IS_MAP_EDITOR_ONLY__", "true" if is_map_only(email) else "false")
-                .replace("__REAL_SCRIPT_FIPS_JSON__", json.dumps(list(COUNTY_FOLDER_TO_FIPS.values())))
+                .replace("__REAL_SCRIPT_FIPS_JSON__", dumps_for_html(list(COUNTY_FOLDER_TO_FIPS.values())))
             )
             body = page.encode("utf-8")
             self.send_response(200)
@@ -5252,14 +5496,29 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if self.path.startswith("/pdf-templates/"):
-            if not get_session_email(self):
+            requester_email = get_session_email(self)
+            if not requester_email:
                 self._send_json(401, {"error": "Not signed in."})
                 return
             rest = self.path[len("/pdf-templates/"):]
             if rest.endswith("/preview.png"):
-                self._serve_pdf_template_preview(rest[: -len("/preview.png")])
+                self._serve_pdf_template_preview(rest[: -len("/preview.png")], requester_email)
             else:
-                self._serve_pdf_template(rest)
+                self._serve_pdf_template(rest, requester_email)
+            return
+
+        # Anything unrecognized got a 200 with the full dashboard before
+        # this - an unknown URL, /admin, /.env all "worked". Only "/"
+        # (with or without a query string - the post-checkout redirect
+        # lands on "/?signup_token=...") falls through to the dashboard;
+        # everything else is a real 404.
+        if urlsplit(self.path).path != "/":
+            body = NOT_FOUND_HTML.encode("utf-8")
+            self.send_response(404)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
 
         email = get_session_email(self)
@@ -5271,12 +5530,20 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_pdf_template(self, filename):
+    def _serve_pdf_template(self, filename, requester_email):
         # basename() strips any "../" a crafted path might carry - only
         # files actually inside PDF_TEMPLATES_DIR are servable.
         filename = os.path.basename(filename)
         path = os.path.join(PDF_TEMPLATES_DIR, filename)
         if not filename.endswith(".pdf") or not os.path.isfile(path):
+            self._send_json(404, {"error": "Not found"})
+            return
+        # Scoped to the template's owner (or an admin) - see the
+        # 2026-09-22 cross-customer-template fix. Same 404 as "no such
+        # file" above, so this doesn't confirm a filename belongs to
+        # someone else's template either.
+        template = pipeline_db.get_pdf_template_by_filename(filename)
+        if not template or not can_use_pdf_template(template, requester_email):
             self._send_json(404, {"error": "Not found"})
             return
         with open(path, "rb") as f:
@@ -5287,10 +5554,14 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _serve_pdf_template_preview(self, filename):
+    def _serve_pdf_template_preview(self, filename, requester_email):
         filename = os.path.basename(filename)
         path = os.path.join(PDF_TEMPLATES_DIR, filename)
         if not filename.endswith(".pdf") or not os.path.isfile(path):
+            self._send_json(404, {"error": "Not found"})
+            return
+        template = pipeline_db.get_pdf_template_by_filename(filename)
+        if not template or not can_use_pdf_template(template, requester_email):
             self._send_json(404, {"error": "Not found"})
             return
         with open(path, "rb") as f:
@@ -5347,20 +5618,20 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         if self.path == "/api/upload-pdf-template":
             fields = _parse_multipart(self.headers.get("Content-Type", ""), raw_body)
             try:
-                status, response = handle_upload_pdf_template(fields)
+                status, response = handle_upload_pdf_template(fields, get_session_email(self))
             except Exception as e:
                 print(f"Unexpected error uploading PDF template: {e}")
-                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+                status, response = 500, {"error": "Something went wrong on our side. Please try again in a minute."}
             self._send_json(status, response)
             return
 
         if self.path == "/api/generate-pdf-template":
             fields = _parse_multipart(self.headers.get("Content-Type", ""), raw_body)
             try:
-                status, response = handle_generate_pdf_template(fields)
+                status, response = handle_generate_pdf_template(fields, get_session_email(self))
             except Exception as e:
                 print(f"Unexpected error generating PDF template: {e}")
-                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+                status, response = 500, {"error": "Something went wrong on our side. Please try again in a minute."}
             self._send_json(status, response)
             return
 
@@ -5379,16 +5650,20 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json(400, {"error": "Invalid JSON body"})
                 return
             try:
-                status, response = handle_set_county_status(payload, restrict_to_marking_sold=is_map_only(email))
+                status, response = handle_set_county_status(payload, restrict_to_marking_sold=is_map_only(email), actor_email=email)
             except Exception as e:
                 print(f"Unexpected error setting county status: {e}")
-                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+                status, response = 500, {"error": "Something went wrong on our side. Please try again in a minute."}
             self._send_json(status, response)
             return
 
         if self.path == "/api/map/set-price":
             email = get_session_email(self)
-            if not (is_admin(email) or is_map_editor(email)):
+            # Admin-only, unlike set-status just above - the map-editor
+            # role is documented (see MAP_EDITOR_EMAILS above) as "mark a
+            # county sold, nothing else"; it should never be able to
+            # change what a county is priced at.
+            if not is_admin(email):
                 self._send_json(403, {"error": "Admin access required."})
                 return
             try:
@@ -5397,10 +5672,10 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json(400, {"error": "Invalid JSON body"})
                 return
             try:
-                status, response = handle_set_county_price(payload)
+                status, response = handle_set_county_price(payload, actor_email=email)
             except Exception as e:
                 print(f"Unexpected error setting county price: {e}")
-                status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+                status, response = 500, {"error": "Something went wrong on our side. Please try again in a minute."}
             self._send_json(status, response)
             return
 
@@ -5428,13 +5703,13 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 return
 
         try:
-            if self.path == "/api/send-letter":
-                status, response = handler(payload, get_session_email(self))
-            else:
-                status, response = handler(payload)
+            # send-letter, delete-pdf-template and set-pdf-template-field
+            # all now take (payload, requester_email) - each checks the
+            # requester's own access/ownership before acting.
+            status, response = handler(payload, get_session_email(self))
         except Exception as e:
             print(f"Unexpected error handling {self.path}: {e}")
-            status, response = 500, {"error": "Unexpected server error - check the terminal running dashboard.py."}
+            status, response = 500, {"error": "Something went wrong on our side. Please try again in a minute."}
 
         self._send_json(status, response)
 
@@ -5461,6 +5736,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             return
 
         token = create_session(signed_in_email)
+        pipeline_db.record_audit_event(signed_in_email, "login")
         self._send_json(200, {"ok": True, "email": signed_in_email}, set_cookie=token)
 
     def _handle_signup(self, raw_body):
@@ -5497,66 +5773,76 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
 
-        # A mailing profile only ever exists alongside a real account under
-        # this flow (both are created together once payment clears, below),
-        # so this doubles as the "email already registered" check without
+        # A mailing profile only ever exists alongside a real account, so
+        # this doubles as the "email already registered" check without
         # needing a Supabase admin lookup.
         if pipeline_db.get_mailing_profile(email):
             self._send_json(400, {"error": "An account with that email already exists - please log in instead."})
             return
 
-        # No Supabase account is created here. It's only created once Stripe
-        # confirms payment (see billing.handle_webhook_event) - that way an
-        # abandoned or declined checkout never leaves a real, logged-in
-        # account behind with nothing paid for. The signup form's data is
-        # held in memory under this token until the webhook resolves it.
-        pending_token = billing.stash_pending_signup({
-            "email": email, "password": password, "from_name": from_name,
-            "from_address1": from_address1, "from_address2": from_address2,
-            "from_city": from_city, "from_state": from_state, "from_zip": from_zip,
-        })
+        # The Supabase account and mailing profile are created right here,
+        # before checkout even starts - not held in server memory pending a
+        # webhook. That in-memory approach (a dict keyed by a token passed
+        # through Stripe) meant a Render restart between checkout and the
+        # webhook landing silently lost the pending signup entirely: no
+        # account was ever created, yet the county still got locked to that
+        # email once the webhook did arrive (it reads the email straight off
+        # Stripe's own metadata, independent of the lost dict) - so the
+        # customer paid, had no way to log in, and the county they paid for
+        # was gone. Fixed 2026-09-22. Creating the account up front does mean
+        # an abandoned checkout leaves a real account behind - but with no
+        # mailing profile... no, the profile is set below too, so: with no
+        # county access, which is harmless (empty dashboard, nothing paid
+        # for, nothing to clean up).
+        try:
+            auth.sign_up(email, password)
+        except auth.SignupError as e:
+            self._send_json(400, {"error": str(e)})
+            return
+        pipeline_db.set_mailing_profile(email, from_name, from_address1, from_address2, from_city, from_state, from_zip)
 
         base_url = self._base_url()
         try:
             checkout_url = billing.create_checkout_session(
                 email, kind, key,
-                success_url=f"{base_url}/?checkout=success&signup_token={pending_token}",
+                success_url=f"{base_url}/?checkout=success&key={key}",
                 cancel_url=f"{base_url}/?checkout=cancel",
-                extra_metadata={"pending_signup_token": pending_token},
             )
         except billing.BillingError as e:
-            billing.pop_pending_signup(pending_token)
             self._send_json(400, {"error": f"Couldn't start checkout: {e}"})
             return
 
-        self._send_json(200, {"ok": True, "checkoutUrl": checkout_url})
+        # Logged in immediately - the account already exists, and this cookie
+        # rides along through the Stripe redirect and back (same browser,
+        # same domain), so there's no more "does the account exist yet" race
+        # on return; only "has the webhook granted county access yet" (see
+        # _handle_claim_signup_session), which the frontend polls for using
+        # this same session rather than a one-time token.
+        session_token = create_session(email)
+        self._send_json(200, {"ok": True, "checkoutUrl": checkout_url}, set_cookie=session_token)
 
     def _handle_claim_signup_session(self, raw_body):
         """Polled by the frontend after Stripe redirects back from checkout
-        for a brand-new signup. The account doesn't exist until the webhook
-        (a separate, async server-to-server call from Stripe) has landed and
-        resolved the pending signup below - which can be a moment after this
-        redirect - so this can legitimately return "still pending" a few
-        times before it succeeds."""
+        for a brand-new signup, to learn once the async webhook has granted
+        the county access that was just paid for. The account and session
+        already exist by this point (created synchronously in
+        _handle_signup, before checkout ever started) - the only thing that
+        can still be "pending" here is the webhook itself."""
+        email = get_session_email(self)
+        if not email:
+            self._send_json(401, {"error": "Not signed in - please log in with the email and password you just created."})
+            return
         try:
             payload = json.loads(raw_body or b"{}")
         except json.JSONDecodeError:
             self._send_json(400, {"error": "Invalid JSON body"})
             return
 
-        token = str(payload.get("token", "")).strip()
-        pending = billing.get_pending_signup(token) if token else None
-        if not pending:
-            self._send_json(404, {"error": "Signup session not found or already used."})
-            return
-        if not pending.get("resolved_email"):
+        key = str(payload.get("key", "")).strip()
+        if key and key in pipeline_db.get_counties_for_user(email):
+            self._send_json(200, {"ok": True, "email": email})
+        else:
             self._send_json(202, {"pending": True})
-            return
-
-        email = pending["resolved_email"]
-        billing.pop_pending_signup(token)
-        session_token = create_session(email)
-        self._send_json(200, {"ok": True, "email": email}, set_cookie=session_token)
 
     def _base_url(self):
         host = self.headers.get("Host", f"127.0.0.1:{PORT}")
@@ -5581,7 +5867,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "You already have access to that plan."})
             return
 
-        if pipeline_db.get_county_owner(key):
+        if pipeline_db.get_county_owner(key) or key in get_offline_sold_county_folders():
             self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
 
@@ -5614,18 +5900,29 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         print(f"Stripe webhook handled: {event_type}")
         self._send_json(200, {"received": True})
 
+    def _is_local_request(self):
+        """Same heuristic _base_url() uses for http vs https - local dev
+        (python3 dashboard.py against 127.0.0.1/localhost) has no TLS, so a
+        Secure cookie would just never get sent there; production (Render,
+        behind HTTPS) should never see the cookie over plain HTTP."""
+        host = self.headers.get("Host", f"127.0.0.1:{PORT}")
+        return host.startswith("127.0.0.1") or host.startswith("localhost")
+
     def _send_json(self, status, payload, set_cookie=None, clear_cookie=False):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        cookie_attrs = "HttpOnly; Path=/; SameSite=Lax"
+        if not self._is_local_request():
+            cookie_attrs += "; Secure"
         if set_cookie:
             self.send_header(
                 "Set-Cookie",
-                f"{SESSION_COOKIE_NAME}={set_cookie}; HttpOnly; Path=/; SameSite=Lax; Max-Age={SESSION_DURATION_SECONDS}",
+                f"{SESSION_COOKIE_NAME}={set_cookie}; {cookie_attrs}; Max-Age={SESSION_DURATION_SECONDS}",
             )
         if clear_cookie:
-            self.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0")
+            self.send_header("Set-Cookie", f"{SESSION_COOKIE_NAME}=; {cookie_attrs}; Max-Age=0")
         self.end_headers()
         self.wfile.write(body)
 

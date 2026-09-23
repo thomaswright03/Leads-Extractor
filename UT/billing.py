@@ -12,45 +12,16 @@ import hashlib
 import hmac
 import json
 import os
-import secrets
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
-import auth
 import pipeline_db
 
 STRIPE_API_URL = "https://api.stripe.com/v1"
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
-
-# A brand-new signup's Supabase account isn't created until Stripe confirms
-# payment (see handle_webhook_event below) - so the signup form's data has
-# to be held somewhere between "form submitted" and "webhook lands".
-# In-memory only, same tradeoff as dashboard.py's SESSIONS dict: it resets
-# on a Render redeploy, which would lose a signup that's mid-checkout at
-# that exact moment (rare - a redeploy overlapping the seconds between
-# submitting the form and finishing Stripe's hosted checkout page).
-PENDING_SIGNUPS = {}
-
-
-def stash_pending_signup(data):
-    """data is the raw signup form fields (email, password, mailing
-    address). Returns a token to pass through Stripe as checkout metadata
-    and back to the frontend as a success_url query param."""
-    token = secrets.token_urlsafe(32)
-    PENDING_SIGNUPS[token] = {**data, "resolved_email": None}
-    return token
-
-
-def get_pending_signup(token):
-    return PENDING_SIGNUPS.get(token)
-
-
-def pop_pending_signup(token):
-    return PENDING_SIGNUPS.pop(token, None)
-
 
 class BillingError(Exception):
     """User-facing message - bad plan, Stripe API error, or webhook
@@ -200,6 +171,29 @@ def refund_letter_charge(payment_intent_id):
         print(f"WARNING: failed to refund letter charge {payment_intent_id} after a failed send: {e}")
 
 
+def cancel_and_refund_losing_subscription(subscription_id, reason=""):
+    """The losing side of a race for the same county (see
+    handle_webhook_event's checkout.session.completed branch) used to just
+    print a warning asking a human to cancel/refund it manually - meaning
+    the customer kept paying monthly for a county they never got access to,
+    for however long it took someone to notice the log line. This cancels
+    the subscription immediately and refunds its first invoice, same as
+    refund_letter_charge: best-effort and logged rather than raised, since
+    the caller's own request (the webhook delivery) already succeeded and
+    this is a side effect of that, not the thing that should fail it."""
+    try:
+        subscription = _stripe_request("GET", f"subscriptions/{subscription_id}")
+        invoice_id = subscription.get("latest_invoice")
+        _stripe_request("DELETE", f"subscriptions/{subscription_id}")
+        if invoice_id:
+            invoice = _stripe_request("GET", f"invoices/{invoice_id}")
+            payment_intent_id = invoice.get("payment_intent")
+            if payment_intent_id:
+                _stripe_request("POST", "refunds", {"payment_intent": payment_intent_id})
+    except BillingError as e:
+        print(f"WARNING: failed to auto-cancel/refund losing subscription {subscription_id} ({reason}): {e} - cancel/refund it manually in Stripe.")
+
+
 def _verify_webhook_signature(payload_bytes, sig_header):
     """Stripe's own signature scheme, implemented by hand instead of pulling
     in the stripe pip package for just this: the Stripe-Signature header is
@@ -244,29 +238,14 @@ def handle_webhook_event(payload_bytes, sig_header):
         subscription_id = obj.get("subscription")
         customer_id = obj.get("customer")
 
-        # For a brand-new signup (see dashboard.py's _handle_signup /
-        # stash_pending_signup above), payment has just cleared - only now
-        # is it safe to actually create the Supabase account and mailing
-        # profile. An existing agent adding another county never has this
-        # metadata key, so this is a no-op for them.
-        pending_token = metadata.get("pending_signup_token")
-        if pending_token:
-            pending = PENDING_SIGNUPS.get(pending_token)
-            if pending:
-                try:
-                    auth.sign_up(pending["email"], pending["password"])
-                except auth.SignupError as e:
-                    # Most likely a duplicate concurrent checkout for the
-                    # same brand-new email (e.g. a double-click or two
-                    # tabs) - the account already exists from the other one,
-                    # so payment is still honored below rather than lost.
-                    print(f"NOTE: signup webhook found an existing account for {pending['email']} ({e}); continuing since payment already cleared.")
-                pipeline_db.set_mailing_profile(
-                    pending["email"], pending["from_name"], pending["from_address1"],
-                    pending["from_address2"], pending["from_city"], pending["from_state"],
-                    pending["from_zip"],
-                )
-                pending["resolved_email"] = pending["email"]
+        # A brand-new signup's account and mailing profile are now created
+        # synchronously in dashboard.py's _handle_signup, before checkout
+        # even starts (see that function's docstring) - so there is nothing
+        # left to do here for them. This branch used to create the account
+        # here instead, keyed off a token in an in-memory dict that a
+        # Render restart between checkout and this webhook would wipe -
+        # silently losing a paid signup, with no login ever created and the
+        # county still locked to that email below. Fixed 2026-09-22.
 
         if email and kind == "county" and key and subscription_id:
             # Belt-and-suspenders re-check: the /api endpoints already block
@@ -279,11 +258,12 @@ def handle_webhook_event(payload_bytes, sig_header):
             existing_owner = pipeline_db.get_county_owner(key)
             if existing_owner and existing_owner != email.strip().lower():
                 print(
-                    f"WARNING: county '{key}' is already owned by {existing_owner}; "
-                    f"{email}'s payment (subscription {subscription_id}) was NOT granted "
-                    f"access. Cancel/refund that subscription in Stripe manually."
+                    f"County '{key}' was already owned by {existing_owner}; "
+                    f"{email}'s payment (subscription {subscription_id}) was not granted "
+                    f"access - auto-cancelling and refunding that subscription."
                 )
                 pipeline_db.record_subscription(email, kind, key, customer_id, subscription_id, "conflict")
+                cancel_and_refund_losing_subscription(subscription_id, reason=f"lost county race for '{key}'")
             else:
                 pipeline_db.record_subscription(email, kind, key, customer_id, subscription_id, "active")
                 pipeline_db.grant_county_access(email, key)
@@ -298,5 +278,41 @@ def handle_webhook_event(payload_bytes, sig_header):
                 print(f"County '{record['key']}' is now available again (previously held by {record['email']}).")
             elif record["kind"] == "state_bundle":
                 pipeline_db.revoke_state_access(record["email"], record["key"])
+
+    elif event_type == "customer.subscription.updated":
+        # Previously unhandled entirely: a failing card doesn't necessarily
+        # delete the subscription (that depends on the Stripe account's
+        # dunning/retry settings) - Stripe can instead leave it "past_due"
+        # indefinitely or move it to "unpaid", neither of which ever fires
+        # customer.subscription.deleted above, so access was never revoked
+        # no matter how long a card kept failing. Reacting to the status
+        # Stripe actually reports (rather than only to outright deletion)
+        # closes that gap without this code guessing at a grace period -
+        # that policy lives in the Stripe account's dunning settings.
+        subscription_id = obj["id"]
+        new_status = obj.get("status")
+        record = pipeline_db.get_subscription_by_stripe_id(subscription_id)
+        if record:
+            pipeline_db.update_subscription_status(subscription_id, new_status)
+            is_county = record["kind"] == "county"
+            revoke = pipeline_db.revoke_county_access if is_county else pipeline_db.revoke_state_access
+            grant = pipeline_db.grant_county_access if is_county else pipeline_db.grant_state_access
+            if new_status in ("unpaid", "canceled", "incomplete_expired"):
+                revoke(record["email"], record["key"])
+                print(f"{record['kind']} '{record['key']}' access revoked - subscription {subscription_id} is now '{new_status}' (previously held by {record['email']}).")
+            elif new_status == "active":
+                # Recovered - e.g. the customer updated a card that had been
+                # failing. Re-grant in case an earlier update on this same
+                # subscription had revoked it.
+                grant(record["email"], record["key"])
+
+    elif event_type == "invoice.payment_failed":
+        # No action taken here - Stripe's own retry schedule and dunning
+        # settings decide what happens next, and customer.subscription.
+        # updated above reacts once the subscription's status actually
+        # changes. This is just making the failure visible at all, which it
+        # previously was not: the event reached this handler and nothing
+        # happened, silently, every time.
+        print(f"NOTE: invoice payment failed for subscription {obj.get('subscription')} (customer {obj.get('customer')}).")
 
     return event_type

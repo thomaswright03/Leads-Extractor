@@ -46,29 +46,69 @@ def _row_to_pdf_template(row):
         "filename": row["filename"],
         "fieldPositions": row.get("field_positions") or {},
         "uploadedAt": row.get("uploaded_at"),
+        "ownerEmail": row.get("owner_email"),
     }
 
 
-def add_pdf_template(company_name, template_name, filename):
+def add_pdf_template(company_name, template_name, filename, owner_email=None):
     """filename is the on-disk name under dashboard.py's pdf_templates/ dir,
     not a path - the caller owns where the actual bytes live (still local
-    disk; only the metadata/history in this module moved to Supabase)."""
-    result = (
-        _get_client()
-        .table("pdf_templates")
-        .insert({"company_name": company_name, "template_name": template_name, "filename": filename})
-        .execute()
-    )
+    disk; only the metadata/history in this module moved to Supabase).
+
+    owner_email is the account that uploaded/generated this template - see
+    the 2026-09-22 security review's cross-customer-template finding.
+    Templates created before this column existed have owner_email NULL,
+    which get_pdf_templates(owner_email=...) below treats as admin-only,
+    not "everyone's" - never as a wildcard match.
+
+    Falls back to the pre-migration insert if the owner_email column
+    doesn't exist in this Supabase project yet (see supabase_schema.sql's
+    ALTER TABLE) - so this code can ship and every OTHER fix in the same
+    deploy takes effect immediately, without the whole dashboard breaking
+    for every signed-in user in the gap before that one-line migration is
+    run. Once it is, this stops triggering and every new template gets a
+    real owner automatically."""
+    fields = {"company_name": company_name, "template_name": template_name, "filename": filename}
+    try:
+        result = _get_client().table("pdf_templates").insert({**fields, "owner_email": owner_email}).execute()
+    except Exception as e:
+        print(f"WARNING: pdf_templates insert with owner_email failed ({e}) - has the 2026-09-22 migration run yet? Inserting without it.")
+        result = _get_client().table("pdf_templates").insert(fields).execute()
     return result.data[0]["id"]
 
 
-def get_pdf_templates():
-    result = _get_client().table("pdf_templates").select("*").order("id", desc=True).execute()
+def get_pdf_templates(owner_email=None):
+    """owner_email=None returns every template - the admin/operator view.
+    A specific email returns only that account's own templates; a legacy
+    template with no owner on record is excluded here (not shown to just
+    anyone), still visible and reassignable through the unfiltered call.
+
+    If the owner_email column doesn't exist yet (migration not run - see
+    add_pdf_template's docstring), the owner_email!=None case fails
+    outright rather than silently matching everyone's templates: this
+    returns no templates at all until the migration runs, which is a
+    worse-than-ideal but safe degradation, not the cross-customer exposure
+    this filter exists to close."""
+    query = _get_client().table("pdf_templates").select("*").order("id", desc=True)
+    if owner_email is not None:
+        query = query.eq("owner_email", owner_email)
+        try:
+            result = query.execute()
+        except Exception as e:
+            print(f"WARNING: pdf_templates owner_email filter failed ({e}) - has the 2026-09-22 migration run yet? Returning no templates rather than everyone's.")
+            return []
+    else:
+        result = query.execute()
     return [_row_to_pdf_template(r) for r in result.data]
 
 
 def get_pdf_template(template_id):
     result = _get_client().table("pdf_templates").select("*").eq("id", template_id).execute()
+    return _row_to_pdf_template(result.data[0]) if result.data else None
+
+
+def get_pdf_template_by_filename(filename):
+    result = _get_client().table("pdf_templates").select("*").eq("filename", filename).execute()
     return _row_to_pdf_template(result.data[0]) if result.data else None
 
 
@@ -90,14 +130,42 @@ def delete_pdf_template(template_id):
     _get_client().table("pdf_templates").delete().eq("id", template_id).execute()
 
 
+def record_audit_event(actor_email, action, target="", details=""):
+    """A durable, admin-app-editable-nowhere trail of who did a
+    consequential action - template deletion, a price change, a county
+    status change, granting access - none of which left any record before
+    (2026-09-22 accountability fix). Best-effort: a failure here is logged
+    rather than raised, since an audit-log write failing shouldn't block
+    the actual action it's recording."""
+    try:
+        _get_client().table("audit_log").insert({
+            "actor_email": actor_email or None,
+            "action": action,
+            "target": target,
+            "details": details,
+        }).execute()
+    except Exception as e:
+        print(f"WARNING: failed to record audit event ({action} by {actor_email}): {e}")
+
+
 def record_letter_sent(county, full_name, owner_name, parcel_id, template_id, message,
                         lob_letter_id="", status="", expected_delivery_date="",
-                        preview_url="", test_mode=True, error=""):
+                        preview_url="", test_mode=True, error="", sender_email=""):
     """One row per send attempt - letters_sent is never wiped, so this is the
     durable record of what was mailed. Keyed for lookups by
     (county, full_name, parcel_id) since parcel numbering isn't guaranteed
-    unique across different counties' assessor systems."""
-    _get_client().table("letters_sent").insert({
+    unique across different counties' assessor systems.
+
+    sender_email is the account that actually clicked Send - previously not
+    recorded at all when an admin sent on an agent's behalf (only a stdout
+    print, unsearchable and lost on restart), so there was no way to trace
+    a letter or a charge back to who triggered it. See the 2026-09-22
+    accountability fix. By the time this is called the letter has already
+    been sent (and possibly charged) - if the sender_email column doesn't
+    exist yet in this Supabase project (migration not run), this falls
+    back to recording the row without it rather than losing the send
+    record entirely over a column that isn't there yet."""
+    fields = {
         "county": county,
         "full_name": full_name,
         "owner_name": owner_name,
@@ -110,7 +178,12 @@ def record_letter_sent(county, full_name, owner_name, parcel_id, template_id, me
         "preview_url": preview_url,
         "test_mode": bool(test_mode),
         "error": error,
-    }).execute()
+    }
+    try:
+        _get_client().table("letters_sent").insert({**fields, "sender_email": sender_email or None}).execute()
+    except Exception as e:
+        print(f"WARNING: letters_sent insert with sender_email failed ({e}) - has the 2026-09-22 migration run yet? Recording without it.")
+        _get_client().table("letters_sent").insert(fields).execute()
 
 
 def get_counties_for_user(email):
@@ -361,17 +434,35 @@ def set_mailing_profile(email, from_name, from_address1, from_address2, from_cit
 
 def get_latest_letters_sent():
     """Latest send attempt per (county, full_name, parcel_id), keyed the same
-    way dashboard.py keys its merged, multi-county confirmed-leads list."""
-    result = (
-        _get_client()
-        .table("letters_sent")
-        .select("county,full_name,parcel_id,template_id,lob_letter_id,status,"
-                "expected_delivery_date,preview_url,test_mode,error,sent_at")
-        .order("id")
-        .execute()
-    )
+    way dashboard.py keys its merged, multi-county confirmed-leads list.
+
+    Paginates through every row rather than one unbounded select() - the
+    Supabase project's default API row cap (1000) would otherwise silently
+    truncate this to the oldest 1000 rows once the table grew past that,
+    making every more-recently-sent letter look like it was never sent, and
+    re-offering it for a second send and a second charge in bulk send -
+    reproduced in the 2026-09-22 security review."""
+    client = _get_client()
+    page_size = 1000
+    rows = []
+    start = 0
+    while True:
+        page = (
+            client
+            .table("letters_sent")
+            .select("county,full_name,parcel_id,template_id,lob_letter_id,status,"
+                    "expected_delivery_date,preview_url,test_mode,error,sent_at")
+            .order("id")
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        rows.extend(page.data)
+        if len(page.data) < page_size:
+            break
+        start += page_size
+
     latest = {}
-    for row in result.data:
+    for row in rows:
         key = (row["county"], row["full_name"], row["parcel_id"])
         latest[key] = {
             "templateId": row["template_id"],
