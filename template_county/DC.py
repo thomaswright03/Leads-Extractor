@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pandas as pd
 import undetected_chromedriver as uc
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -157,7 +157,15 @@ def _search_legacy_attempt(name):
             search_button = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-framer-name="search_button"]'))
             )
-            search_button.click()
+            # Since ~2026-09-22 an invisible full-screen overlay (<div
+            # aria-hidden="true" style="position: fixed; inset: 0px;">)
+            # sits over the button once the name is typed, so a real click
+            # raised ElementClickInterceptedException on every lookup and
+            # nothing got confirmed. A DOM click goes straight to the button.
+            try:
+                search_button.click()
+            except ElementClickInterceptedException:
+                driver.execute_script("arguments[0].click();", search_button)
 
         run_with_stale_retry(do_search)
 
