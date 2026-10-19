@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 import pandas as pd
 
+import admin_page
 import auth
 import billing
 import mailer
@@ -3810,6 +3811,7 @@ def build_dashboard_html(authenticated=False, email=None):
         .replace(
             "__MAP_LINK__",
             '<a href="/map" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline;">The Map</a>'
+            '<a href="/admin" style="color: rgba(255,255,255,0.75); margin-left: 12px; text-decoration: underline;">Admin</a>'
             if is_admin(email) else "",
         )
         .replace("__LEAD_DATA_JSON__", dumps_for_html(lead_data))
@@ -5438,6 +5440,27 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if self.path == "/admin":
+            email = get_session_email(self)
+            if not email:
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.end_headers()
+                return
+            if not is_admin(email):
+                self._send_json(404, {"error": "Not found"})
+                return
+            body = admin_page.build_admin_html(
+                COUNTIES, SCRIPT_DIR, load_confirmed_leads_from_excel, email
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
             return

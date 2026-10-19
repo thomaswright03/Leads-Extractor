@@ -51,6 +51,7 @@ jobs:
 
       - name: Run Salt Lake County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'slk'
+        id: slk
         # continue-on-error on every county step below: without it, GitHub
         # Actions' default behavior is that one failing step stops the whole
         # job immediately and skips everything after it - including the
@@ -66,60 +67,70 @@ jobs:
 
       - name: Run Utah County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'uta'
+        id: uta
         continue-on-error: true
         working-directory: UT/uta
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Weber County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'web'
+        id: web
         continue-on-error: true
         working-directory: UT/web
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Maricopa County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'mar'
+        id: mar
         continue-on-error: true
         working-directory: AZ/mar
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Apache County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'apa'
+        id: apa
         continue-on-error: true
         working-directory: AZ/apa
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Greenlee County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gre'
+        id: gre
         continue-on-error: true
         working-directory: AZ/gre
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Graham County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gra'
+        id: gra
         continue-on-error: true
         working-directory: AZ/gra
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Pima County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'pim'
+        id: pim
         continue-on-error: true
         working-directory: AZ/pim
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Gila County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gil'
+        id: gil
         continue-on-error: true
         working-directory: AZ/gil
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Yuma County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'yum'
+        id: yum
         continue-on-error: true
         working-directory: AZ/yum
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
       - name: Run Yavapai County pipeline
         if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'yav'
+        id: yav
         continue-on-error: true
         working-directory: AZ/yav
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
@@ -132,3 +143,28 @@ jobs:
           git add UT/slk UT/uta UT/web AZ/mar AZ/apa AZ/gre AZ/gra AZ/pim AZ/gil AZ/yum AZ/yav
           git diff --cached --quiet || git commit -m "Lead extraction $(date -u +%Y-%m-%d) (${{ inputs.mode || 'daily' }}, ${{ inputs.county || 'all' }})"
           git push
+
+      # The county steps above use continue-on-error so one broken county
+      # can't stop the others' leads from being committed - but that also
+      # meant a broken county never turned the run red (Legacy.com lookups
+      # failed for four weeks unnoticed). Fail here, after the commit, so
+      # the run still saves what worked and shows which counties didn't.
+      - name: Fail the run if any county failed
+        if: always()
+        run: |
+          failed=""
+          [ "${{ steps.slk.outcome }}" = "failure" ] && failed="$failed slk"
+          [ "${{ steps.uta.outcome }}" = "failure" ] && failed="$failed uta"
+          [ "${{ steps.web.outcome }}" = "failure" ] && failed="$failed web"
+          [ "${{ steps.mar.outcome }}" = "failure" ] && failed="$failed mar"
+          [ "${{ steps.apa.outcome }}" = "failure" ] && failed="$failed apa"
+          [ "${{ steps.gre.outcome }}" = "failure" ] && failed="$failed gre"
+          [ "${{ steps.gra.outcome }}" = "failure" ] && failed="$failed gra"
+          [ "${{ steps.pim.outcome }}" = "failure" ] && failed="$failed pim"
+          [ "${{ steps.gil.outcome }}" = "failure" ] && failed="$failed gil"
+          [ "${{ steps.yum.outcome }}" = "failure" ] && failed="$failed yum"
+          [ "${{ steps.yav.outcome }}" = "failure" ] && failed="$failed yav"
+          if [ -n "$failed" ]; then
+            echo "::error::County pipelines failed:$failed"
+            exit 1
+          fi

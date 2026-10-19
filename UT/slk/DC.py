@@ -52,9 +52,11 @@ def get_output_path():
     return get_output_path_for_date(datetime.now().strftime("%Y-%m-%d"))
 
 
-def record_last_run(mode, paths):
+def record_last_run(mode, paths, stats=None):
+    """stats (candidate/lookup/confirmed counts) is shown on the /admin
+    page in dashboard.py; pricer.py only reads "files"."""
     with open(LAST_RUN_PATH, "w") as f:
-        json.dump({"mode": mode, "files": paths}, f)
+        json.dump({"mode": mode, "files": paths, "stats": stats or {}}, f)
 
 
 def detect_chrome_major_version():
@@ -326,10 +328,12 @@ if __name__ == "__main__":
 
     if not matches:
         print("No candidate matches to confirm yet. Run SLK$.py first.")
-        record_last_run(mode, [])
+        record_last_run(mode, [], {"candidates": 0, "lookups_attempted": 0, "lookups_failed": 0, "confirmed": 0})
     else:
         obituary_cache = {}
         confirmed_rows = []
+        lookups_attempted = 0
+        lookups_failed = 0
 
         for match_id, full_name, owner_name, parcel_id, cleaned_full_name, cleaned_owner_name, posted_date, address, city, state, zip_code in matches:
             def confirm(reason, obituary_url=""):
@@ -358,6 +362,9 @@ if __name__ == "__main__":
 
             if full_name not in obituary_cache:
                 text, url = search_legacy(full_name)
+                lookups_attempted += 1
+                if url is None:
+                    lookups_failed += 1
                 obituary_cache[full_name] = (text or "", url)
                 pipeline_db.set_obituary_url(full_name, url)
 
@@ -421,4 +428,18 @@ if __name__ == "__main__":
             written_paths.append(output_path)
             print(f"Exported {len(df)} confirmed matches to {output_path}")
 
-        record_last_run(mode, written_paths)
+        record_last_run(mode, written_paths, {
+            "candidates": len(matches),
+            "lookups_attempted": lookups_attempted,
+            "lookups_failed": lookups_failed,
+            "confirmed": len(confirmed_rows),
+        })
+
+        # Every lookup erroring out means Legacy.com changed under us, not
+        # that there were no leads - exactly what went unnoticed from
+        # 2026-09-22 to 2026-10-19 while every run still showed green. Exit
+        # non-zero (after the export above, so nothing is lost) so the
+        # county's step fails and the nightly run goes red.
+        if lookups_attempted and lookups_failed == lookups_attempted:
+            print(f"\nERROR: all {lookups_attempted} Legacy.com lookups failed - no match could be checked.")
+            sys.exit(1)
