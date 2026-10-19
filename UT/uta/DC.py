@@ -312,6 +312,54 @@ def _search_legacy_attempt(name):
     finally:
         driver.quit()
 
+# Owner-record words that name the kind of holding, not a person. Seen
+# live 2026-10-19 "confirming" leads on their own: "family" matched any
+# obituary mentioning family (Ann Taylor Barnett against MICHAEL JAMES
+# BARNETT AND CHERYL ANN BARNETT FAMILY REVOCABLE TRUST), "living" did the
+# same for a dozen different Thomas Smith trusts.
+NON_PERSON_WORDS = {
+    "trust", "trusts", "trustee", "trustees", "living", "family", "revocable",
+    "irrevocable", "estate", "life", "survivor", "survivors", "declaration",
+    "dated", "properties", "property", "investments", "holdings", "company",
+}
+NAME_SKIP_WORDS = {"jr", "sr", "ii", "iii", "iv", "tr", "trs", "jt", "et", "al", "etal", "est", "le",
+                   "the", "rev", "fr", "dr", "mr", "mrs", "ms"}
+OWNER_SEGMENT_SPLIT = re.compile(r"\s*(?:/|&|,|\band\b)\s*", re.I)
+
+
+def _name_tokens(text):
+    text = re.sub(r"\(.*?\)|[\"\u201c\u201d][^\"\u201c\u201d]*[\"\u201c\u201d]", " ", text or "")
+    words = re.sub(r"[^A-Za-z\s-]", " ", text).lower().split()
+    return [w for w in words if w not in NAME_SKIP_WORDS]
+
+
+def middle_name_conflict(full_name, owner_name):
+    """True when the owner record gives this first+last name a middle name
+    or initial that doesn't match the deceased's own - a different person
+    with the same name (e.g. obituary 'Robert C. Johnson Jr.' vs owner
+    'ROBERT A JOHNSON ...', 'Andrew George Howard' vs 'HOWARD ANDREW L').
+    Only rules records out, never in: the 2026-09-22 note below explains
+    why a matching initial can't be used to confirm anything."""
+    tokens = _name_tokens(full_name)
+    if len(tokens) < 3:
+        return False
+    first, last = tokens[0], tokens[-1]
+    middle_initials = {t[0] for t in tokens[1:-1]}
+    for segment in OWNER_SEGMENT_SPLIT.split(owner_name or ""):
+        seg = _name_tokens(segment)
+        if first not in seg or last not in seg:
+            continue
+        i = seg.index(first)
+        if i + 1 >= len(seg):
+            continue
+        following = seg[i + 1]
+        if following == last or following in NON_PERSON_WORDS:
+            continue
+        if following[0] not in middle_initials:
+            return True
+    return False
+
+
 def extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
     """The owner record's >=4-char "extra" tokens (spouse name, middle
     name, etc.) left over after subtracting the deceased's own name -
@@ -319,7 +367,7 @@ def extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
     right property record."""
     full_tokens = {w.lower() for w in (cleaned_full_name or "").split()}
     owner_tokens = {w.lower() for w in (cleaned_owner_name or "").split()}
-    return sorted(owner_tokens - full_tokens)
+    return sorted(owner_tokens - full_tokens - NON_PERSON_WORDS)
 
 
 # 2026-09-22 accuracy fix: this file used to have a check_initial_vs_own_name()
@@ -392,6 +440,11 @@ if __name__ == "__main__":
         lookups_failed = 0
 
         for match_id, full_name, owner_name, parcel_id, cleaned_full_name, cleaned_owner_name, posted_date, address, city, state, zip_code in matches:
+            if middle_name_conflict(full_name, owner_name):
+                pipeline_db.set_match_confirmation(match_id, False, "")
+                print(f"Not confirmed: {full_name} / owner '{owner_name}' — different middle name or initial")
+                continue
+
             if not has_anything_to_check(cleaned_full_name, cleaned_owner_name, city):
                 print(f"Skipping obituary search for '{full_name}' / owner '{owner_name}' — no keyword or city to check against.")
                 pipeline_db.set_match_confirmation(match_id, False, "")
