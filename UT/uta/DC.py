@@ -126,6 +126,69 @@ def run_with_stale_retry(action, retries=3, delay=0.5):
             time.sleep(delay)
 
 
+PERSON_PAGE_SUMMARY_SELECTOR = '[data-sentry-component="Sources"] p.text-lg'
+PARTNER_LINK_SELECTOR = '[aria-label="Obituary partner sites"] a[href*="/us/obituaries/"]'
+
+
+def read_obituary_text(driver):
+    """(text, url) for the obituary on the legacy.com/person/... page a
+    search result now opens, or ("", None) if there isn't one.
+
+    Confirmed from saved pages 2026-10-19: the person page shows the
+    obituary in a "Read <name>'s Obituary" card, cut off at ~300
+    characters for longer ones. The full text is in the page's own Next.js
+    data (self.__next_f) as a chunk that starts with that same summary.
+    The old absolute-XPath reads matched nothing on this page, so every
+    lookup came back "No obituary text found." and nothing confirmed.
+    When the card only says "Pending By Family", the newspaper copy linked
+    under "Read the full obituary on our trusted partner sites" is read
+    instead."""
+    try:
+        WebDriverWait(driver, 10).until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, PERSON_PAGE_SUMMARY_SELECTOR)
+        )
+    except Exception:
+        return "", None
+    person_url = driver.current_url
+    summary = " ".join(
+        (p.get_attribute("textContent") or "").strip()
+        for p in driver.find_elements(By.CSS_SELECTOR, PERSON_PAGE_SUMMARY_SELECTOR)
+    ).strip()
+    full = driver.execute_script(
+        """
+        const prefix = arguments[0];
+        if (!prefix || !self.__next_f) return "";
+        let best = "";
+        for (const chunk of self.__next_f) {
+            const t = chunk && chunk[1];
+            if (typeof t === "string" && t.startsWith(prefix) && t.length > best.length) best = t;
+        }
+        return best;
+        """,
+        summary[:60],
+    ) or ""
+    text = full if len(full) > len(summary) else summary
+    if text and text.lower() != "pending by family":
+        return text, person_url
+
+    for link in driver.find_elements(By.CSS_SELECTOR, PARTNER_LINK_SELECTOR)[:2]:
+        href = link.get_attribute("href")
+        try:
+            driver.get(href)
+            element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'ObituaryText')]"))
+            )
+            partner_text = (element.get_attribute("textContent") or "").strip()
+            if len(partner_text) > 100:
+                return partner_text, driver.current_url
+        except Exception:
+            continue
+        finally:
+            if driver.current_url != person_url:
+                driver.back()
+    return "", None
+
+
 def _search_legacy_attempt(name):
     print(f"Searching for '{name}' on Legacy.com...")
     options = uc.ChromeOptions()
@@ -186,6 +249,11 @@ def _search_legacy_attempt(name):
 
         run_with_stale_retry(click_result)
 
+        obituary_text, obituary_url = read_obituary_text(driver)
+        if obituary_text:
+            return obituary_text, obituary_url
+
+        # Older page layouts, kept as a fallback.
         obituary_text = None
         obituary_url = None
 
