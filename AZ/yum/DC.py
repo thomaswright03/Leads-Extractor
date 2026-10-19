@@ -184,6 +184,16 @@ def _search_legacy_attempt(name):
 
         run_with_stale_retry(click_result)
 
+        # TEMP DEBUG (to be reverted): save the person page so its markup can be inspected.
+        try:
+            time.sleep(4)
+            slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+            with open(os.path.join(SCRIPT_DIR, f".debug_legacy_{slug}.html"), "w", encoding="utf-8") as fh:
+                fh.write(driver.page_source)
+            print(f"  DEBUG person page: title={driver.title!r} url={driver.current_url} body={driver.find_element(By.TAG_NAME, 'body').text[:1500]!r}")
+        except Exception as dbg_e:
+            print(f"  DEBUG save failed: {dbg_e}")
+
         obituary_text = None
         obituary_url = None
 
@@ -234,6 +244,7 @@ def _search_legacy_attempt(name):
             except Exception:
                 obituary_text = None
 
+        print(f"  DEBUG obituary_text len={len(obituary_text or '')} url={driver.current_url} start={(obituary_text or '')[:300]!r}")
         if obituary_text:
             return obituary_text, (obituary_url or driver.current_url)
         else:
