@@ -384,7 +384,14 @@ if __name__ == "__main__":
                     # still exiting 0 as if nothing was wrong). One retry
                     # with a brand new browser rather than losing the rest
                     # of the run to it.
-                    print(f"Browser session error on '{name}' (attempt {attempt}/2): {e}")
+                    print(f"Browser session error on '{name}' (attempt {attempt}/2): {type(e).__name__}: {e}")
+                    # A bare TimeoutException has an empty message - say
+                    # what page the browser was actually stuck on.
+                    try:
+                        body_text = driver.find_element(By.TAG_NAME, "body").text.strip().replace("\n", " | ")
+                        print(f"  Stuck on: title={driver.title!r} url={driver.current_url} body={body_text[:300]!r}")
+                    except Exception:
+                        pass
                     if attempt == 2:
                         print(f"  Giving up on '{name}' after a fresh-browser retry.")
                         break
