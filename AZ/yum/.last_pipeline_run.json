@@ -1,0 +1,59 @@
+{
+ "mode": "daily",
+ "started_at": "2026-10-19T17:59:34+00:00",
+ "ok": true,
+ "failed_step": null,
+ "steps": [
+  {
+   "script": "obi.py",
+   "returncode": 0,
+   "seconds": 211,
+   "error_count": 0,
+   "error_lines": []
+  },
+  {
+   "script": "$.py",
+   "returncode": 0,
+   "seconds": 684,
+   "error_count": 18,
+   "error_lines": [
+    "Browser session error on 'Fr. Frank Weil' (attempt 1/2): TimeoutException: Message:",
+    "Browser session error on 'Fr. Frank Weil' (attempt 2/2): TimeoutException: Message:",
+    "  Giving up on 'Fr. Frank Weil' after a fresh-browser retry.",
+    "Browser session error on 'Stephen R. McColley' (attempt 1/2): TimeoutException: Message:",
+    "Browser session error on 'Stephen R. McColley' (attempt 2/2): TimeoutException: Message:",
+    "  Giving up on 'Stephen R. McColley' after a fresh-browser retry.",
+    "Browser session error on 'Janet Louise Worstell' (attempt 1/2): TimeoutException: Message:",
+    "Browser session error on 'Janet Louise Worstell' (attempt 2/2): TimeoutException: Message:",
+    "  Giving up on 'Janet Louise Worstell' after a fresh-browser retry.",
+    "Browser session error on 'Verna Christine Bachmeier' (attempt 1/2): TimeoutException: Message:",
+    "Browser session error on 'Verna Christine Bachmeier' (attempt 2/2): TimeoutException: Message:",
+    "  Giving up on 'Verna Christine Bachmeier' after a fresh-browser retry.",
+    "Browser session error on 'Evelyn Ann Chiplis' (attempt 1/2): TimeoutException: Message:",
+    "Browser session error on 'Evelyn Ann Chiplis' (attempt 2/2): TimeoutException: Message:",
+    "  Giving up on 'Evelyn Ann Chiplis' after a fresh-browser retry.",
+    "Browser session error on 'Faith Raether' (attempt 1/2): TimeoutException: Message:",
+    "Browser session error on 'Faith Raether' (attempt 2/2): TimeoutException: Message:",
+    "  Giving up on 'Faith Raether' after a fresh-browser retry."
+   ]
+  },
+  {
+   "script": "DC.py",
+   "returncode": 0,
+   "seconds": 717,
+   "error_count": 2,
+   "error_lines": [
+    "Error processing 'Blanca E. Rascon' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--fra",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception"
+   ]
+  },
+  {
+   "script": "pricer.py",
+   "returncode": 0,
+   "seconds": 9,
+   "error_count": 0,
+   "error_lines": []
+  }
+ ],
+ "finished_at": "2026-10-19T18:26:35+00:00"
+}
