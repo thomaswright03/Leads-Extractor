@@ -1,20 +1,20 @@
 {
  "mode": "daily",
- "started_at": "2026-10-19T17:59:34+00:00",
- "ok": true,
- "failed_step": null,
+ "started_at": "2026-10-19T18:50:34+00:00",
+ "ok": false,
+ "failed_step": "pricer.py",
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 211,
+   "seconds": 49,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 684,
+   "seconds": 659,
    "error_count": 18,
    "error_lines": [
     "Browser session error on 'Fr. Frank Weil' (attempt 1/2): TimeoutException: Message:",
@@ -40,20 +40,26 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 717,
-   "error_count": 2,
-   "error_lines": [
-    "Error processing 'Blanca E. Rascon' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--fra",
-    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception"
-   ]
+   "seconds": 553,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "pricer.py",
-   "returncode": 0,
-   "seconds": 9,
-   "error_count": 0,
-   "error_lines": []
+   "returncode": 1,
+   "seconds": 24,
+   "error_count": 8,
+   "error_lines": [
+    "Couldn't establish a session (attempt 1/3): Message: unknown error: net::ERR_CONNECTION_RESET",
+    "Couldn't establish a session (attempt 2/3): Message: unknown error: net::ERR_CONNECTION_RESET",
+    "Couldn't establish a session (attempt 3/3): Message: unknown error: net::ERR_CONNECTION_RESET",
+    "Traceback (most recent call last):",
+    "    self.error_handler.check_response(response)",
+    "  File \"/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/selenium/webdriver/remote/errorhandler.py\", line 232, in check_response",
+    "    raise exception_class(message, screen, stacktrace)",
+    "selenium.common.exceptions.WebDriverException: Message: unknown error: net::ERR_CONNECTION_RESET"
+   ]
   }
  ],
- "finished_at": "2026-10-19T18:26:35+00:00"
+ "finished_at": "2026-10-19T19:11:58+00:00"
 }
