@@ -103,6 +103,16 @@ class CaptchaBlockedError(Exception):
 
 
 def _check_not_walled(driver):
+    # Confirmed live 2026-10-19: from GitHub Actions' (Azure) runners the
+    # search page itself now answers a flat "403 Forbidden" - the site
+    # blocks those IPs outright. Stop the run with a clear failure instead
+    # of timing out on every name and exiting 0 as if all was well.
+    if driver.title == "403 Forbidden":
+        raise CaptchaBlockedError(
+            "Gila County's assessor site answered 403 Forbidden - it is "
+            "blocking this machine's IP address (GitHub Actions runners are "
+            "blocked as of 2026-10-19). Run this county from another network."
+        )
     if driver.title == "Human Verification" or "let's confirm you are human" in driver.page_source.lower():
         raise CaptchaBlockedError(
             "Gila County's assessor site put up its AWS WAF 'Human "
