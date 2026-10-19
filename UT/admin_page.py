@@ -41,7 +41,7 @@ def _parse_time(value):
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-def county_health(county, county_dir, leads, now):
+def county_health(county, county_dir, leads, now, paused=False):
     """Everything the page shows for one county, plus a status of
     "ok" / "warn" / "fail" / "none" and the reasons behind it."""
     run = _read_json(os.path.join(county_dir, ".last_pipeline_run.json"))
@@ -60,7 +60,10 @@ def county_health(county, county_dir, leads, now):
     elif last_lead_date < (now - NO_LEADS_WARN_AFTER).strftime("%Y-%m-%d"):
         warnings.append(f"No new leads since {last_lead_date}")
     finished_at = _parse_time((run or {}).get("finished_at"))
-    if run is None:
+    if paused:
+        status = "paused"
+        problems, warnings = [], ["Paused: off the market and not run nightly (see PAUSED_COUNTY_FOLDERS)."]
+    elif run is None:
         status = "none"
         warnings.append("No run recorded yet (written from the next nightly run on).")
     else:
@@ -123,22 +126,22 @@ def _fmt_lead_date(value, now):
     return f"{value} ({'today' if days == 0 else f'{days}d ago'})"
 
 
-STATUS_LABELS = {"ok": "Healthy", "warn": "Warning", "fail": "Failing", "none": "No data"}
+STATUS_LABELS = {"ok": "Healthy", "warn": "Warning", "fail": "Failing", "none": "No data", "paused": "Paused"}
 
 
-def build_admin_html(counties, script_dir, load_leads, email):
+def build_admin_html(counties, script_dir, load_leads, email, paused_folders=()):
     now = datetime.now(timezone.utc)
     rows = []
     for county in counties:
         county_dir = os.path.join(script_dir, county.get("path", county["folder"]))
-        rows.append(county_health(county, county_dir, load_leads(county), now))
-    order = {"fail": 0, "warn": 1, "none": 2, "ok": 3}
+        rows.append(county_health(county, county_dir, load_leads(county), now, county["folder"] in paused_folders))
+    order = {"fail": 0, "warn": 1, "none": 2, "ok": 3, "paused": 4}
     rows.sort(key=lambda r: (order[r["status"]], r["label"]))
 
     counts = {key: sum(1 for r in rows if r["status"] == key) for key in order}
     summary = " &middot; ".join(
         f'<span class="pill {key}">{counts[key]} {STATUS_LABELS[key].lower()}</span>'
-        for key in ("fail", "warn", "none", "ok") if counts[key]
+        for key in ("fail", "warn", "none", "ok", "paused") if counts[key]
     )
 
     cards = []
@@ -213,14 +216,14 @@ ADMIN_HTML = """<!doctype html>
   .card.fail { border-left-color: #b4372f; }
   .card.warn { border-left-color: #c9932b; }
   .card.ok { border-left-color: #2a6b3d; }
-  .card.none { border-left-color: #a3abb8; }
+  .card.none, .card.paused { border-left-color: #a3abb8; }
   .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .card h2 { font-size: 17px; margin: 0; }
   .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
   .pill.fail { background: #fbe4e2; color: #8e2a23; }
   .pill.warn { background: #fbf1de; color: #8f631a; }
   .pill.ok { background: #eaf6ee; color: #2a6b3d; }
-  .pill.none { background: #eef0f3; color: #5b6475; }
+  .pill.none, .pill.paused { background: #eef0f3; color: #5b6475; }
   .notes { margin: 12px 0 0; padding-left: 18px; font-size: 13.5px; }
   .notes .problem { color: #8e2a23; font-weight: 600; }
   .notes .warning { color: #8f631a; }

@@ -93,6 +93,13 @@ COUNTY_FOLDER_TO_FIPS = {
 # handle_set_county_price resolves one from the other.
 COUNTY_FIPS_TO_FOLDER = {fips: folder for folder, fips in COUNTY_FOLDER_TO_FIPS.items()}
 
+# Counties whose pipeline can't currently run, taken off the market until
+# it can: shown as "building" on The Map, listed as unavailable on the
+# signup form, and refused at signup/checkout. An existing owner keeps
+# access. Gila: its assessor site blocks GitHub Actions' IPs (403) as of
+# 2026-10-19, so the nightly run can't search it.
+PAUSED_COUNTY_FOLDERS = {"gil"}
+
 
 def get_offline_sold_county_folders():
     """Folder keys of every county marked 'sold' on the internal Map tool
@@ -443,6 +450,8 @@ def _compute_all_county_statuses():
             # "real" flag tells the map not to offer any manual override on
             # top of it - there's nothing to override.
             statuses[fips] = {"status": "sold", "customerEmail": owner, "real": True}
+        elif folder_key in PAUSED_COUNTY_FOLDERS:
+            statuses[fips] = {"status": "building"}
         elif fips not in statuses:
             # No manual override recorded at all - the default computed
             # state for a county with a real pipeline script and no real
@@ -3770,7 +3779,9 @@ def build_dashboard_html(authenticated=False, email=None):
             "taken": p["key"] in taken_counties,
         }
         for p in pipeline_db.get_pricing_plans()
-        if p["kind"] == "county"
+        # A paused county is left off entirely rather than shown as
+        # "Taken", which the page promises means sold for good.
+        if p["kind"] == "county" and p["key"] not in PAUSED_COUNTY_FOLDERS
     ]
 
     counties = [{"folder": c["folder"], "label": c["label"], "state": c["state"]} for c in visible_counties]
@@ -5455,7 +5466,7 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json(404, {"error": "Not found"})
                 return
             body = admin_page.build_admin_html(
-                COUNTIES, SCRIPT_DIR, load_confirmed_leads_from_excel, email
+                COUNTIES, SCRIPT_DIR, load_confirmed_leads_from_excel, email, PAUSED_COUNTY_FOLDERS
             ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -5795,6 +5806,9 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
         if pipeline_db.get_county_owner(key):
             self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
             return
+        if key in PAUSED_COUNTY_FOLDERS:
+            self._send_json(400, {"error": "That county isn't available right now."})
+            return
 
         # A mailing profile only ever exists alongside a real account, so
         # this doubles as the "email already registered" check without
@@ -5892,6 +5906,9 @@ class DashboardRequestHandler(http.server.BaseHTTPRequestHandler):
 
         if pipeline_db.get_county_owner(key) or key in get_offline_sold_county_folders():
             self._send_json(400, {"error": "That county is no longer available - it's already assigned to another agent."})
+            return
+        if key in PAUSED_COUNTY_FOLDERS:
+            self._send_json(400, {"error": "That county isn't available right now."})
             return
 
         base_url = self._base_url()
