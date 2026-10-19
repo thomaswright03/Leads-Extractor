@@ -1,0 +1,44 @@
+{
+ "mode": "daily",
+ "started_at": "2026-10-19T17:48:31+00:00",
+ "ok": true,
+ "failed_step": null,
+ "steps": [
+  {
+   "script": "obi.py",
+   "returncode": 0,
+   "seconds": 71,
+   "error_count": 0,
+   "error_lines": []
+  },
+  {
+   "script": "$.py",
+   "returncode": 0,
+   "seconds": 97,
+   "error_count": 6,
+   "error_lines": [
+    "Browser session error on 'Kenneth (Ken) A. Wheeler' (attempt 1/2): Message:",
+    "Browser session error on 'Kenneth (Ken) A. Wheeler' (attempt 2/2): Message:",
+    "  Giving up on 'Kenneth (Ken) A. Wheeler' after a fresh-browser retry.",
+    "Browser session error on 'Ann Chin Ng' (attempt 1/2): Message:",
+    "Browser session error on 'Ann Chin Ng' (attempt 2/2): Message:",
+    "  Giving up on 'Ann Chin Ng' after a fresh-browser retry."
+   ]
+  },
+  {
+   "script": "DC.py",
+   "returncode": 0,
+   "seconds": 0,
+   "error_count": 0,
+   "error_lines": []
+  },
+  {
+   "script": "pricer.py",
+   "returncode": 0,
+   "seconds": 0,
+   "error_count": 0,
+   "error_lines": []
+  }
+ ],
+ "finished_at": "2026-10-19T17:51:20+00:00"
+}
