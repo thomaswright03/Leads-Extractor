@@ -72,6 +72,9 @@ def county_health(county, county_dir, leads, now):
             problems.append(f"All {attempted} obituary lookups failed")
         elif failed:
             warnings.append(f"{failed} of {attempted} obituary lookups failed")
+        noisy = [f"{step.get('script')} printed {step.get('error_count')} error line(s)"
+                 for step in run.get("steps", []) if step.get("error_count") and step.get("returncode") == 0]
+        warnings.extend(noisy)
         if finished_at and now - finished_at > STALE_AFTER:
             warnings.append("Missed the last nightly run")
         status = "fail" if problems else ("warn" if warnings else "ok")
