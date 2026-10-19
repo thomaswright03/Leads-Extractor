@@ -89,11 +89,27 @@ def create_driver():
 GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 
+LEADING_TITLES = {"the", "rev", "reverend", "fr", "father", "pastor", "dr", "mr", "mrs", "ms", "sister", "sr"}
+
+
+def _drop_nicknames_and_titles(full_name):
+    """Quoted nicknames and leading titles aren't part of the name an
+    assessor files a deed under. Seen live 2026-10-19: 'Geraldine "Gerry" ,
+    "Granny" Fuller' searched for 'Geraldine "Gerry"', and 'Fr. Frank Weil'
+    or 'The Rev. ...' used the title as the first name."""
+    name = re.sub(r'\s*,?\s*["\u201c\u201d][^"\u201c\u201d]*["\u201c\u201d]\s*,?\s*', " ", full_name).strip(" ,")
+    parts = name.split()
+    while len(parts) > 2 and parts[0].lower().rstrip(".") in LEADING_TITLES:
+        parts = parts[1:]
+    return " ".join(parts)
+
+
 def _strip_suffix_clause(full_name):
     """Obituary listing names occasionally carry a trailing rank/title
     clause after a comma (e.g. "David J Kitchin III, Lt Col/R") - a
     comma-separated generational suffix (e.g. "Robert Smith, Jr.") is kept,
     since that's part of the actual name."""
+    full_name = _drop_nicknames_and_titles(full_name)
     name, sep, suffix = full_name.partition(",")
     if sep and suffix.strip().rstrip(".").lower() not in GENERATIONAL_SUFFIXES:
         return name.strip()
