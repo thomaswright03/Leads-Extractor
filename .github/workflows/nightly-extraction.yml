@@ -114,8 +114,12 @@ jobs:
         working-directory: AZ/pim
         run: xvfb-run -a python3 master.py ${{ inputs.mode || 'daily' }}
 
+      # Paused 2026-10-19: Gila's assessor site answers 403 to GitHub
+      # Actions runners, so this only ever fails here. It still runs when
+      # dispatched by hand for county=gil (e.g. to check if it's unblocked).
+      # Also listed in PAUSED_COUNTY_FOLDERS in UT/dashboard.py.
       - name: Run Gila County pipeline
-        if: github.event_name != 'workflow_dispatch' || inputs.county == 'all' || inputs.county == 'gil'
+        if: github.event_name == 'workflow_dispatch' && inputs.county == 'gil'
         id: gil
         continue-on-error: true
         working-directory: AZ/gil

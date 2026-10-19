@@ -2,9 +2,11 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from urllib.parse import quote_plus, urlparse, parse_qs
 
 import undetected_chromedriver as uc
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -76,6 +78,21 @@ def create_driver():
 GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 
+LEADING_TITLES = {"the", "rev", "reverend", "fr", "father", "pastor", "dr", "mr", "mrs", "ms", "sister", "sr"}
+
+
+def _drop_nicknames_and_titles(full_name):
+    """Quoted nicknames and leading titles aren't part of the name an
+    assessor files a deed under. Seen live 2026-10-19: 'Geraldine "Gerry" ,
+    "Granny" Fuller' searched for 'Geraldine "Gerry"', and 'Fr. Frank Weil'
+    or 'The Rev. ...' used the title as the first name."""
+    name = re.sub(r'\s*,?\s*["\u201c\u201d][^"\u201c\u201d]*["\u201c\u201d]\s*,?\s*', " ", full_name).strip(" ,")
+    parts = name.split()
+    while len(parts) > 2 and parts[0].lower().rstrip(".") in LEADING_TITLES:
+        parts = parts[1:]
+    return " ".join(parts)
+
+
 def _strip_suffix_clause(full_name):
     """Obituary listing names occasionally carry a trailing rank/title
     clause after a comma (e.g. "David J Kitchin III, Lt Col/R") - confirmed
@@ -83,6 +100,7 @@ def _strip_suffix_clause(full_name):
     "Kitchin"), which degrades the search into matching almost any owner
     with that first name. A comma-separated generational suffix (e.g.
     "Robert Smith, Jr.") is kept, since that's part of the actual name."""
+    full_name = _drop_nicknames_and_titles(full_name)
     name, sep, suffix = full_name.partition(",")
     if sep and suffix.strip().rstrip(".").lower() not in GENERATIONAL_SUFFIXES:
         return name.strip()
@@ -150,6 +168,30 @@ def parse_address(full_address):
     return None
 
 
+def _load_results_page(driver, url):
+    """Load one results page and wait for its table. The site sits behind a
+    Cloudflare "Just a moment..." check that some page loads hit (6 of ~60
+    searches on 2026-10-19); it usually clears by itself within seconds, so
+    give it longer and one reload rather than losing the name."""
+    has_rows = lambda d: d.find_elements(By.CSS_SELECTOR, "table tbody tr td")
+    for attempt in (1, 2):
+        driver.get(url)
+        try:
+            WebDriverWait(driver, 15).until(has_rows)
+            return
+        except TimeoutException:
+            if driver.title != "Just a moment...":
+                raise
+        print("  Waiting on Maricopa's Cloudflare check...")
+        try:
+            WebDriverWait(driver, 30).until(has_rows)
+            return
+        except TimeoutException:
+            if attempt == 2:
+                raise
+            time.sleep(5)
+
+
 def search_owner(driver, query):
     """Every real-property result row for `query`, across up to MAX_PAGES
     of this dedicated real-property search results page."""
@@ -157,10 +199,7 @@ def search_owner(driver, query):
     total = None
     page = 1
     while page <= MAX_PAGES:
-        driver.get(SEARCH_URL.format(query=quote_plus(query), page=page))
-        WebDriverWait(driver, 15).until(
-            lambda d: d.find_elements(By.CSS_SELECTOR, "table tbody tr td")
-        )
+        _load_results_page(driver, SEARCH_URL.format(query=quote_plus(query), page=page))
         if total is None:
             body_text = driver.find_element(By.TAG_NAME, "body").text
             match = re.search(r"Showing[^\n]*results", body_text)
@@ -220,7 +259,14 @@ if __name__ == "__main__":
                 pipeline_db.add_match(name, owner_name, parcel_id, street, city, state, zip_code, posted_date)
 
         except Exception as e:
-            print(f"Error during search for '{name}': {e}")
+            print(f"Error during search for '{name}': {type(e).__name__}: {e}")
+            # A bare TimeoutException has an empty message - say what page
+            # the browser was actually stuck on.
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text.strip().replace("\n", " | ")
+                print(f"  Stuck on: title={driver.title!r} url={driver.current_url} body={body_text[:400]!r}")
+            except Exception:
+                pass
         finally:
             driver.quit()
 

@@ -126,6 +126,69 @@ def run_with_stale_retry(action, retries=3, delay=0.5):
             time.sleep(delay)
 
 
+PERSON_PAGE_SUMMARY_SELECTOR = '[data-sentry-component="Sources"] p.text-lg'
+PARTNER_LINK_SELECTOR = '[aria-label="Obituary partner sites"] a[href*="/us/obituaries/"]'
+
+
+def read_obituary_text(driver):
+    """(text, url) for the obituary on the legacy.com/person/... page a
+    search result now opens, or ("", None) if there isn't one.
+
+    Confirmed from saved pages 2026-10-19: the person page shows the
+    obituary in a "Read <name>'s Obituary" card, cut off at ~300
+    characters for longer ones. The full text is in the page's own Next.js
+    data (self.__next_f) as a chunk that starts with that same summary.
+    The old absolute-XPath reads matched nothing on this page, so every
+    lookup came back "No obituary text found." and nothing confirmed.
+    When the card only says "Pending By Family", the newspaper copy linked
+    under "Read the full obituary on our trusted partner sites" is read
+    instead."""
+    try:
+        WebDriverWait(driver, 10).until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, PERSON_PAGE_SUMMARY_SELECTOR)
+        )
+    except Exception:
+        return "", None
+    person_url = driver.current_url
+    summary = " ".join(
+        (p.get_attribute("textContent") or "").strip()
+        for p in driver.find_elements(By.CSS_SELECTOR, PERSON_PAGE_SUMMARY_SELECTOR)
+    ).strip()
+    full = driver.execute_script(
+        """
+        const prefix = arguments[0];
+        if (!prefix || !self.__next_f) return "";
+        let best = "";
+        for (const chunk of self.__next_f) {
+            const t = chunk && chunk[1];
+            if (typeof t === "string" && t.startsWith(prefix) && t.length > best.length) best = t;
+        }
+        return best;
+        """,
+        summary[:60],
+    ) or ""
+    text = full if len(full) > len(summary) else summary
+    if text and text.lower() != "pending by family":
+        return text, person_url
+
+    for link in driver.find_elements(By.CSS_SELECTOR, PARTNER_LINK_SELECTOR)[:2]:
+        href = link.get_attribute("href")
+        try:
+            driver.get(href)
+            element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'ObituaryText')]"))
+            )
+            partner_text = (element.get_attribute("textContent") or "").strip()
+            if len(partner_text) > 100:
+                return partner_text, driver.current_url
+        except Exception:
+            continue
+        finally:
+            if driver.current_url != person_url:
+                driver.back()
+    return "", None
+
+
 def _search_legacy_attempt(name):
     print(f"Searching for '{name}' on Legacy.com...")
     options = uc.ChromeOptions()
@@ -184,6 +247,11 @@ def _search_legacy_attempt(name):
 
         run_with_stale_retry(click_result)
 
+        obituary_text, obituary_url = read_obituary_text(driver)
+        if obituary_text:
+            return obituary_text, obituary_url
+
+        # Older page layouts, kept as a fallback.
         obituary_text = None
         obituary_url = None
 
@@ -242,6 +310,54 @@ def _search_legacy_attempt(name):
     finally:
         driver.quit()
 
+# Owner-record words that name the kind of holding, not a person. Seen
+# live 2026-10-19 "confirming" leads on their own: "family" matched any
+# obituary mentioning family (Ann Taylor Barnett against MICHAEL JAMES
+# BARNETT AND CHERYL ANN BARNETT FAMILY REVOCABLE TRUST), "living" did the
+# same for a dozen different Thomas Smith trusts.
+NON_PERSON_WORDS = {
+    "trust", "trusts", "trustee", "trustees", "living", "family", "revocable",
+    "irrevocable", "estate", "life", "survivor", "survivors", "declaration",
+    "dated", "properties", "property", "investments", "holdings", "company",
+}
+NAME_SKIP_WORDS = {"jr", "sr", "ii", "iii", "iv", "tr", "trs", "jt", "et", "al", "etal", "est", "le",
+                   "the", "rev", "fr", "dr", "mr", "mrs", "ms"}
+OWNER_SEGMENT_SPLIT = re.compile(r"\s*(?:/|&|,|\band\b)\s*", re.I)
+
+
+def _name_tokens(text):
+    text = re.sub(r"\(.*?\)|[\"\u201c\u201d][^\"\u201c\u201d]*[\"\u201c\u201d]", " ", text or "")
+    words = re.sub(r"[^A-Za-z\s-]", " ", text).lower().split()
+    return [w for w in words if w not in NAME_SKIP_WORDS]
+
+
+def middle_name_conflict(full_name, owner_name):
+    """True when the owner record gives this first+last name a middle name
+    or initial that doesn't match the deceased's own - a different person
+    with the same name (e.g. obituary 'Robert C. Johnson Jr.' vs owner
+    'ROBERT A JOHNSON ...', 'Andrew George Howard' vs 'HOWARD ANDREW L').
+    Only rules records out, never in: the 2026-09-22 note below explains
+    why a matching initial can't be used to confirm anything."""
+    tokens = _name_tokens(full_name)
+    if len(tokens) < 3:
+        return False
+    first, last = tokens[0], tokens[-1]
+    middle_initials = {t[0] for t in tokens[1:-1]}
+    for segment in OWNER_SEGMENT_SPLIT.split(owner_name or ""):
+        seg = _name_tokens(segment)
+        if first not in seg or last not in seg:
+            continue
+        i = seg.index(first)
+        if i + 1 >= len(seg):
+            continue
+        following = seg[i + 1]
+        if following == last or following in NON_PERSON_WORDS:
+            continue
+        if following[0] not in middle_initials:
+            return True
+    return False
+
+
 def extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
     """The owner record's >=4-char "extra" tokens (spouse name, middle
     name, etc.) left over after subtracting the deceased's own name -
@@ -249,7 +365,7 @@ def extract_keyword_candidates(cleaned_full_name, cleaned_owner_name):
     right property record."""
     full_tokens = {w.lower() for w in (cleaned_full_name or "").split()}
     owner_tokens = {w.lower() for w in (cleaned_owner_name or "").split()}
-    return sorted(owner_tokens - full_tokens)
+    return sorted(owner_tokens - full_tokens - NON_PERSON_WORDS)
 
 
 # 2026-09-22 accuracy fix: this file used to have a check_initial_vs_own_name()
@@ -321,6 +437,11 @@ if __name__ == "__main__":
         lookups_failed = 0
 
         for match_id, full_name, owner_name, parcel_id, cleaned_full_name, cleaned_owner_name, posted_date, address, city, state, zip_code in matches:
+            if middle_name_conflict(full_name, owner_name):
+                pipeline_db.set_match_confirmation(match_id, False, "")
+                print(f"Not confirmed: {full_name} / owner '{owner_name}' — different middle name or initial")
+                continue
+
             if not has_anything_to_check(cleaned_full_name, cleaned_owner_name, city):
                 print(f"Skipping obituary search for '{full_name}' / owner '{owner_name}' — no keyword or city to check against.")
                 pipeline_db.set_match_confirmation(match_id, False, "")

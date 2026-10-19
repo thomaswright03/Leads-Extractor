@@ -6,7 +6,7 @@ import random
 import time
 
 import undetected_chromedriver as uc
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -113,11 +113,27 @@ def _check_not_walled(driver):
 GENERATIONAL_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 
+LEADING_TITLES = {"the", "rev", "reverend", "fr", "father", "pastor", "dr", "mr", "mrs", "ms", "sister", "sr"}
+
+
+def _drop_nicknames_and_titles(full_name):
+    """Quoted nicknames and leading titles aren't part of the name an
+    assessor files a deed under. Seen live 2026-10-19: 'Geraldine "Gerry" ,
+    "Granny" Fuller' searched for 'Geraldine "Gerry"', and 'Fr. Frank Weil'
+    or 'The Rev. ...' used the title as the first name."""
+    name = re.sub(r'\s*,?\s*["\u201c\u201d][^"\u201c\u201d]*["\u201c\u201d]\s*,?\s*', " ", full_name).strip(" ,")
+    parts = name.split()
+    while len(parts) > 2 and parts[0].lower().rstrip(".") in LEADING_TITLES:
+        parts = parts[1:]
+    return " ".join(parts)
+
+
 def _strip_suffix_clause(full_name):
     """Obituary listing names occasionally carry a trailing rank/title
     clause after a comma (e.g. "David J Kitchin III, Lt Col/R") - a
     comma-separated generational suffix (e.g. "Robert Smith, Jr.") is kept,
     since that's part of the actual name."""
+    full_name = _drop_nicknames_and_titles(full_name)
     name, sep, suffix = full_name.partition(",")
     if sep and suffix.strip().rstrip(".").lower() not in GENERATIONAL_SUFFIXES:
         return name.strip()
@@ -142,15 +158,44 @@ def extract_first_name(full_name):
     return name_parts[0] if name_parts else ""
 
 
+def _get_https(driver, url, attempts=3):
+    """driver.get(url), retried when a brand-new browser gets bounced to the
+    plain-http version of this site and the connection is reset (confirmed
+    live 2026-10-19: the first visit of a fresh browser landed on
+    http://...search.jsp?guest=true with net::ERR_CONNECTION_RESET, and the
+    same request made again went through)."""
+    for attempt in range(1, attempts + 1):
+        try:
+            driver.get(url)
+        except WebDriverException as e:
+            if "ERR_CONNECTION_RESET" not in str(e) or attempt == attempts:
+                raise
+            time.sleep(2)
+            continue
+        if not driver.current_url.startswith("http://"):
+            return
+        time.sleep(2)
+
+
 def ensure_logged_in(driver):
-    driver.get(f"{SEARCH_URL}?guest=true")
-    _check_not_walled(driver)
-    if driver.find_elements(By.ID, "OwnerIDSearchString"):
-        return
-    guest_buttons = driver.find_elements(By.XPATH, GUEST_LOGIN_XPATH)
-    if guest_buttons:
-        guest_buttons[0].click()
-    WebDriverWait(driver, 20).until(lambda d: d.find_elements(By.ID, "OwnerIDSearchString"))
+    # A brand-new browser's first visit sometimes gets bounced to the
+    # plain-http version of this URL and sits on a blank page (confirmed
+    # live 2026-10-19: every fresh-browser retry stalled there, while the
+    # same browser's next visit loaded fine). Load it once more if so.
+    for attempt in (1, 2):
+        _get_https(driver, f"{SEARCH_URL}?guest=true")
+        _check_not_walled(driver)
+        if driver.find_elements(By.ID, "OwnerIDSearchString"):
+            return
+        guest_buttons = driver.find_elements(By.XPATH, GUEST_LOGIN_XPATH)
+        if guest_buttons:
+            guest_buttons[0].click()
+        try:
+            WebDriverWait(driver, 20).until(lambda d: d.find_elements(By.ID, "OwnerIDSearchString"))
+            break
+        except TimeoutException:
+            if attempt == 2:
+                raise
     _check_not_walled(driver)
 
 
@@ -164,12 +209,23 @@ def search_last_name(driver, last_name):
     # tag - <input type=submit> vs <button type=submit> varies by exact
     # deployment, so accept either.
     driver.find_elements(By.CSS_SELECTOR, "input[type='submit'], button[type='submit']")[0].click()
-    WebDriverWait(driver, 20).until(
-        lambda d: d.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']")
+    WebDriverWait(driver, 20).until(_results_loaded)
+    _check_not_walled(driver)
+
+
+def _results_loaded(d):
+    """The results page has finished loading, whether or not it has any
+    rows. A search with no matches (confirmed live 2026-10-19 for names
+    like Worstell and Chiplis) lands on a fully rendered results.jsp with
+    just the column headers and no "Showing 0" text, so waiting for a row
+    or that text alone timed out on every zero-result name."""
+    return (
+        d.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']")
         or "Showing 0" in d.page_source
         or d.title == "Human Verification"
+        or ("results.jsp" in d.current_url
+            and d.execute_script("return document.readyState") in ("interactive", "complete"))
     )
-    _check_not_walled(driver)
 
 
 def parse_result_rows(driver):
@@ -252,11 +308,7 @@ def collect_candidates(driver):
         if not next_url:
             break
         driver.get(next_url)
-        WebDriverWait(driver, 20).until(
-            lambda d: d.find_elements(By.CSS_SELECTOR, "tr[class^='tableRow']")
-            or "Showing 0" in d.page_source
-            or d.title == "Human Verification"
-        )
+        WebDriverWait(driver, 20).until(_results_loaded)
         _check_not_walled(driver)
         for account_num, owner_name in parse_result_rows(driver):
             seen[account_num] = owner_name
@@ -380,7 +432,14 @@ if __name__ == "__main__":
                     # remaining name with a dead session, still exiting 0
                     # as if nothing was wrong. One retry with a brand new
                     # browser rather than losing the rest of the run to it.
-                    print(f"Browser session error on '{name}' (attempt {attempt}/2): {e}")
+                    print(f"Browser session error on '{name}' (attempt {attempt}/2): {type(e).__name__}: {e}")
+                    # A bare TimeoutException has an empty message - say
+                    # what page the browser was actually stuck on.
+                    try:
+                        body_text = driver.find_element(By.TAG_NAME, "body").text.strip().replace("\n", " | ")
+                        print(f"  Stuck on: title={driver.title!r} url={driver.current_url} body={body_text[:400]!r}")
+                    except Exception:
+                        pass
                     if attempt == 2:
                         print(f"  Giving up on '{name}' after a fresh-browser retry.")
                         break
