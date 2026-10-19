@@ -220,7 +220,14 @@ if __name__ == "__main__":
                 pipeline_db.add_match(name, owner_name, parcel_id, street, city, state, zip_code, posted_date)
 
         except Exception as e:
-            print(f"Error during search for '{name}': {e}")
+            print(f"Error during search for '{name}': {type(e).__name__}: {e}")
+            # A bare TimeoutException has an empty message - say what page
+            # the browser was actually stuck on.
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text.strip().replace("\n", " | ")
+                print(f"  Stuck on: title={driver.title!r} url={driver.current_url} body={body_text[:400]!r}")
+            except Exception:
+                pass
         finally:
             driver.quit()
 
