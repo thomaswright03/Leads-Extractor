@@ -158,13 +158,32 @@ def extract_first_name(full_name):
     return name_parts[0] if name_parts else ""
 
 
+def _get_https(driver, url, attempts=3):
+    """driver.get(url), retried when a brand-new browser gets bounced to the
+    plain-http version of this site and the connection is reset (confirmed
+    live 2026-10-19: the first visit of a fresh browser landed on
+    http://...search.jsp?guest=true with net::ERR_CONNECTION_RESET, and the
+    same request made again went through)."""
+    for attempt in range(1, attempts + 1):
+        try:
+            driver.get(url)
+        except WebDriverException as e:
+            if "ERR_CONNECTION_RESET" not in str(e) or attempt == attempts:
+                raise
+            time.sleep(2)
+            continue
+        if not driver.current_url.startswith("http://"):
+            return
+        time.sleep(2)
+
+
 def ensure_logged_in(driver):
     # A brand-new browser's first visit sometimes gets bounced to the
     # plain-http version of this URL and sits on a blank page (confirmed
     # live 2026-10-19: every fresh-browser retry stalled there, while the
     # same browser's next visit loaded fine). Load it once more if so.
     for attempt in (1, 2):
-        driver.get(f"{SEARCH_URL}?guest=true")
+        _get_https(driver, f"{SEARCH_URL}?guest=true")
         _check_not_walled(driver)
         if driver.find_elements(By.ID, "OwnerIDSearchString"):
             return
