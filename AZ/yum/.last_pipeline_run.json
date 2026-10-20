@@ -1,0 +1,43 @@
+{
+ "mode": "daily",
+ "started_at": "2026-10-20T16:47:20+00:00",
+ "ok": true,
+ "failed_step": null,
+ "steps": [
+  {
+   "script": "obi.py",
+   "returncode": 0,
+   "seconds": 31,
+   "error_count": 0,
+   "error_lines": []
+  },
+  {
+   "script": "$.py",
+   "returncode": 0,
+   "seconds": 595,
+   "error_count": 5,
+   "error_lines": [
+    "Browser session error on 'Marion Edith Cole ((Champagne))' (attempt 1/2): TimeoutException: Message:",
+    "  Stuck on: title='Search' url=https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/search.jsp body='Account Search Sale Search Products Help? Logout Public Yuma Treasurer | Account Search | Contact Information | Address: | 197 S Main Street, Suite 201 |  | Yuma, Arizona 85364 |  | Phone: | (",
+    "Browser session error on 'Marion Edith Cole ((Champagne))' (attempt 2/2): TimeoutException: Message:",
+    "  Stuck on: title='Search' url=https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/search.jsp body='Account Search Sale Search Products Help? Logout Public Yuma Treasurer | Account Search | Contact Information | Address: | 197 S Main Street, Suite 201 |  | Yuma, Arizona 85364 |  | Phone: | (",
+    "  Giving up on 'Marion Edith Cole ((Champagne))' after a fresh-browser retry."
+   ]
+  },
+  {
+   "script": "DC.py",
+   "returncode": 0,
+   "seconds": 38,
+   "error_count": 0,
+   "error_lines": []
+  },
+  {
+   "script": "pricer.py",
+   "returncode": 0,
+   "seconds": 22,
+   "error_count": 0,
+   "error_lines": []
+  }
+ ],
+ "finished_at": "2026-10-20T16:58:46+00:00"
+}
