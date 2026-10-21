@@ -1,20 +1,20 @@
 {
  "mode": "daily",
- "started_at": "2026-10-20T16:47:20+00:00",
+ "started_at": "2026-10-21T14:06:26+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 31,
+   "seconds": 19,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 595,
+   "seconds": 455,
    "error_count": 5,
    "error_lines": [
     "Browser session error on 'Marion Edith Cole ((Champagne))' (attempt 1/2): TimeoutException: Message:",
@@ -27,17 +27,17 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 38,
+   "seconds": 52,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 22,
+   "seconds": 28,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-20T16:58:46+00:00"
+ "finished_at": "2026-10-21T14:15:40+00:00"
 }

@@ -1,22 +1,25 @@
 {
  "mode": "daily",
- "started_at": "2026-10-20T16:58:46+00:00",
+ "started_at": "2026-10-21T14:15:40+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 29,
+   "seconds": 25,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 58,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 203,
+   "error_count": 2,
+   "error_lines": [
+    "Error during search for 'David Quigley Sr.': Message:",
+    "Error during search for 'Marvelle Bell': Message:"
+   ]
   },
   {
    "script": "DC.py",
@@ -33,5 +36,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-20T17:00:14+00:00"
+ "finished_at": "2026-10-21T14:19:29+00:00"
 }
