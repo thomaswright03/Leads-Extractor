@@ -1,24 +1,25 @@
 {
  "mode": "daily",
- "started_at": "2026-10-21T14:15:40+00:00",
+ "started_at": "2026-10-22T14:24:26+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 25,
+   "seconds": 5,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 203,
-   "error_count": 2,
+   "seconds": 96,
+   "error_count": 3,
    "error_lines": [
-    "Error during search for 'David Quigley Sr.': Message:",
-    "Error during search for 'Marvelle Bell': Message:"
+    "Error during search for 'John Curtis Pierce': Message:",
+    "Error during search for 'Larry Bruce Betts': Message:",
+    "Error during search for 'Patty Adams Setser': Message:"
    ]
   },
   {
@@ -36,5 +37,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-21T14:19:29+00:00"
+ "finished_at": "2026-10-22T14:26:09+00:00"
 }

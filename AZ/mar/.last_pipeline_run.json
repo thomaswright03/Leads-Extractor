@@ -1,51 +1,55 @@
 {
  "mode": "daily",
- "started_at": "2026-10-21T13:11:19+00:00",
+ "started_at": "2026-10-22T13:13:02+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 25,
+   "seconds": 115,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 937,
+   "seconds": 605,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1569,
-   "error_count": 10,
+   "seconds": 2558,
+   "error_count": 15,
    "error_lines": [
-    "Error processing 'Ben Joseph Fuhrman' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--f",
-    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
-    "Error processing 'Craig Howard Wentzel' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);-",
-    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
-    "Error processing 'Jamie Lorell Foster' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--",
-    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
-    "Error processing 'Jesse D DeLeon' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--frame",
-    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
-    "Error processing 'Wanda Jean Rose' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--fram",
-    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception"
+    "Error processing 'Shirley Jean Lewis (Dyke)' (attempt 1/3): Message:",
+    "Error processing 'Shirley Jean Lewis (Dyke)' (attempt 2/3): Message:",
+    "Giving up on 'Shirley Jean Lewis (Dyke)' after 3 attempts: Message:",
+    "Error processing 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' (attempt 1/3): Message:",
+    "Error processing 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' (attempt 2/3): Message:",
+    "Giving up on 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' after 3 attempts: Message:",
+    "Error processing 'Francisca A San Miguel' (attempt 1/3): Message:",
+    "Error processing 'Francisca A San Miguel' (attempt 2/3): Message:",
+    "Giving up on 'Francisca A San Miguel' after 3 attempts: Message:",
+    "Error processing 'Vincent (Vince) A. Martell' (attempt 1/3): Message:",
+    "Error processing 'Vincent (Vince) A. Martell' (attempt 2/3): Message:",
+    "Giving up on 'Vincent (Vince) A. Martell' after 3 attempts: Message:",
+    "Error processing 'Vanessa J. Austin (Hunter)' (attempt 1/3): Message:",
+    "Error processing 'Vanessa J. Austin (Hunter)' (attempt 2/3): Message:",
+    "Giving up on 'Vanessa J. Austin (Hunter)' after 3 attempts: Message:"
    ]
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 77,
-   "error_count": 2,
+   "seconds": 63,
+   "error_count": 1,
    "error_lines": [
-    "  -> Failed to get property value: Message:",
     "  -> Failed to get property value: Message:"
    ]
   }
  ],
- "finished_at": "2026-10-21T13:54:47+00:00"
+ "finished_at": "2026-10-22T14:08:42+00:00"
 }

@@ -1,37 +1,37 @@
 {
  "mode": "daily",
- "started_at": "2026-10-21T12:48:55+00:00",
+ "started_at": "2026-10-22T13:01:41+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 22,
+   "seconds": 18,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 856,
+   "seconds": 416,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 240,
+   "seconds": 127,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 18,
+   "seconds": 13,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-21T13:07:50+00:00"
+ "finished_at": "2026-10-22T13:11:15+00:00"
 }
