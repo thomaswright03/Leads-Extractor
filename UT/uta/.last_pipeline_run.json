@@ -1,37 +1,44 @@
 {
  "mode": "daily",
- "started_at": "2026-10-22T13:01:41+00:00",
+ "started_at": "2026-10-23T12:51:37+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 18,
+   "seconds": 26,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 416,
+   "seconds": 236,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 127,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 408,
+   "error_count": 6,
+   "error_lines": [
+    "Error processing 'Richard Glade Moss' (attempt 1/3): Message:",
+    "Error processing 'Richard Glade Moss' (attempt 2/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--f",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Giving up on 'Richard Glade Moss' after 3 attempts: Message:",
+    "Error processing 'Richard D. Williams' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception"
+   ]
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 13,
+   "seconds": 8,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-22T13:11:15+00:00"
+ "finished_at": "2026-10-23T13:02:55+00:00"
 }

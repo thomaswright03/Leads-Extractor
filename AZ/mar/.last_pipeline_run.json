@@ -1,55 +1,82 @@
 {
  "mode": "daily",
- "started_at": "2026-10-22T13:13:02+00:00",
+ "started_at": "2026-10-23T13:07:25+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 115,
+   "seconds": 79,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 605,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 1064,
+   "error_count": 1,
+   "error_lines": [
+    "Error during search for 'M. Ann (Ginga, Azannie, Captain Kodak) March (Townsend)': TimeoutException: Message:"
+   ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 2558,
-   "error_count": 15,
+   "seconds": 4274,
+   "error_count": 43,
    "error_lines": [
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Willie Pack' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer-d",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Janie Anderson' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--frame",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'James Moore' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer-d",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Duyck Van Gorder' (attempt 1/3): Message:",
+    "Error processing 'Duyck Van Gorder' (attempt 2/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--fra",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Giving up on 'Duyck Van Gorder' after 3 attempts: Message:",
+    "Error processing 'Isabelle Davis' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--frame",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Mark Perry' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer-de",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'John Albert Roberts' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Jean Price' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer-de",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Dorothy Pajaczek' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--fra",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Donald Finley' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Michael Anthony Lese' (attempt 1/3): Message:",
+    "Error processing 'Michael Anthony Lese' (attempt 2/3): Message:",
+    "Giving up on 'Michael Anthony Lese' after 3 attempts: Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Victoria (Vicki) Carolyn Wolf' (attempt 1/3): Message:",
+    "Error processing 'Victoria (Vicki) Carolyn Wolf' (attempt 2/3): HTTPConnectionPool(host='localhost', port=40009): Read timed out. (read timeout=120)",
+    "Giving up on 'Victoria (Vicki) Carolyn Wolf' after 3 attempts: Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
     "Error processing 'Shirley Jean Lewis (Dyke)' (attempt 1/3): Message:",
-    "Error processing 'Shirley Jean Lewis (Dyke)' (attempt 2/3): Message:",
-    "Giving up on 'Shirley Jean Lewis (Dyke)' after 3 attempts: Message:",
-    "Error processing 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' (attempt 1/3): Message:",
-    "Error processing 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' (attempt 2/3): Message:",
-    "Giving up on 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' after 3 attempts: Message:",
-    "Error processing 'Francisca A San Miguel' (attempt 1/3): Message:",
-    "Error processing 'Francisca A San Miguel' (attempt 2/3): Message:",
-    "Giving up on 'Francisca A San Miguel' after 3 attempts: Message:",
-    "Error processing 'Vincent (Vince) A. Martell' (attempt 1/3): Message:",
-    "Error processing 'Vincent (Vince) A. Martell' (attempt 2/3): Message:",
-    "Giving up on 'Vincent (Vince) A. Martell' after 3 attempts: Message:",
-    "Error processing 'Vanessa J. Austin (Hunter)' (attempt 1/3): Message:",
-    "Error processing 'Vanessa J. Austin (Hunter)' (attempt 2/3): Message:",
-    "Giving up on 'Vanessa J. Austin (Hunter)' after 3 attempts: Message:"
+    "Error processing 'Shirley Jean Lewis (Dyke)' (attempt 2/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 2",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Giving up on 'Shirley Jean Lewis (Dyke)' after 3 attempts: HTTPConnectionPool(host='localhost', port=56719): Read timed out. (read timeout=120)",
+    "Error processing 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(25",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' (attempt 2/3): HTTPConnectionPool(host='localhost', port=39837): Read timed out. (read timeout=120)",
+    "Giving up on 'Socorro (Coco) Alicia Leon (Mu\u00f1oz)' after 3 attempts: Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception"
    ]
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 63,
+   "seconds": 52,
    "error_count": 1,
    "error_lines": [
     "  -> Failed to get property value: Message:"
    ]
   }
  ],
- "finished_at": "2026-10-22T14:08:42+00:00"
+ "finished_at": "2026-10-23T14:38:34+00:00"
 }

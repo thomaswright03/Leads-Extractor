@@ -1,41 +1,37 @@
 {
  "mode": "daily",
- "started_at": "2026-10-22T14:10:54+00:00",
+ "started_at": "2026-10-23T14:39:43+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 84,
+   "seconds": 120,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 84,
+   "seconds": 63,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 211,
-   "error_count": 3,
-   "error_lines": [
-    "Error processing 'John Edwin Cochran III' (attempt 1/3): Message:",
-    "Error processing 'John Edwin Cochran III' (attempt 2/3): Message:",
-    "Giving up on 'John Edwin Cochran III' after 3 attempts: Message:"
-   ]
+   "seconds": 285,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 4,
+   "seconds": 14,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-22T14:17:18+00:00"
+ "finished_at": "2026-10-23T14:47:45+00:00"
 }
