@@ -1,37 +1,44 @@
 {
  "mode": "daily",
- "started_at": "2026-10-23T14:47:45+00:00",
+ "started_at": "2026-10-24T13:14:33+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 126,
+   "seconds": 25,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 275,
+   "seconds": 502,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 17,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 147,
+   "error_count": 6,
+   "error_lines": [
+    "Error processing 'James H. Kelly (Jim)' (attempt 1/3): Message:",
+    "Error processing 'James H. Kelly (Jim)' (attempt 2/3): Message:",
+    "Giving up on 'James H. Kelly (Jim)' after 3 attempts: Message:",
+    "Error processing 'George (Chuck) Charles King' (attempt 1/3): Message:",
+    "Error processing 'George (Chuck) Charles King' (attempt 2/3): Message:",
+    "Giving up on 'George (Chuck) Charles King' after 3 attempts: Message:"
+   ]
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 23,
+   "seconds": 22,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-23T14:55:05+00:00"
+ "finished_at": "2026-10-24T13:26:08+00:00"
 }
