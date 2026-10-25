@@ -1,30 +1,29 @@
 {
  "mode": "daily",
- "started_at": "2026-10-24T13:26:08+00:00",
+ "started_at": "2026-10-25T13:34:17+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 21,
+   "seconds": 9,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 92,
-   "error_count": 2,
+   "seconds": 50,
+   "error_count": 1,
    "error_lines": [
-    "Error during search for 'JOY BISHOP': Message:",
-    "Error during search for 'Robert D. Cooley': Message:"
+    "Error during search for 'Mary Leigh Dunn': Message:"
    ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   },
@@ -36,5 +35,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-24T13:28:02+00:00"
+ "finished_at": "2026-10-25T13:35:17+00:00"
 }

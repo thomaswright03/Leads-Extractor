@@ -1,22 +1,35 @@
 {
  "mode": "daily",
- "started_at": "2026-10-24T11:42:53+00:00",
+ "started_at": "2026-10-25T12:11:52+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 146,
+   "seconds": 68,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 29,
-   "error_count": 3,
+   "seconds": 262,
+   "error_count": 16,
    "error_lines": [
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'."
@@ -25,17 +38,26 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 83,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 1309,
+   "error_count": 6,
+   "error_lines": [
+    "Error processing 'Lorita Drown' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer-",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'Kenneth Guymon' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--frame",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception",
+    "Error processing 'John Johnston' (attempt 1/3): Message: element click intercepted: Element <input placeholder=\"Find a loved one...\" maxlength=\"524288\" class=\"framer-default-input\" rows=\"1\" style=\"--framer-default-input-border-width:2px;--framer-default-input-border-color:rgb(255, 255, 255);--framer",
+    "  (Session info: chrome=155.0.8059.0); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#elementclickinterceptedexception"
+   ]
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 18,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 92,
+   "error_count": 1,
+   "error_lines": [
+    "  -> Failed to get property value: Message:"
+   ]
   }
  ],
- "finished_at": "2026-10-24T11:47:27+00:00"
+ "finished_at": "2026-10-25T12:40:44+00:00"
 }
