@@ -1,78 +1,57 @@
 {
  "mode": "daily",
- "started_at": "2026-10-25T12:52:11+00:00",
+ "started_at": "2026-10-27T13:18:15+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 11,
+   "seconds": 26,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 1372,
-   "error_count": 64,
+   "seconds": 714,
+   "error_count": 1,
    "error_lines": [
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=Sharon+Elliott&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'",
-    "Error during search for 'Joseph F. Whiteside': TimeoutException: Message:",
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=Joseph+Whiteside&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'",
-    "Error during search for 'Charles (Charlie) Edward Bobbitt Jr.': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=Charles+Bobbitt&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-25 ",
-    "Error during search for 'Leonard Kuhnley': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=Leonard+Kuhnley&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-25 ",
-    "Error during search for 'Carmen Chupina': TimeoutException: Message:",
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=Carmen+Chupina&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'",
-    "Error during search for 'Mary Leigh Dunn': TimeoutException: Message:",
-    "  Stuck on: title=\"Page not found: Maricopa County Assessor's Office\" url=https://mcassessor.maricopa.gov/mcs/?q=Mary+Dunn&mod=sm&search-type=rp&page=1 body=\"404 | There was a internal error detected and operation has stopped. Please contact system support. | 404 (Page not found) | The page at https",
-    "Error during search for 'Karen MacLellan': TimeoutException: Message:",
-    "  Stuck on: title=\"Page not found: Maricopa County Assessor's Office\" url=https://mcassessor.maricopa.gov/mcs/?q=Karen+MacLellan&mod=sm&search-type=rp&page=1 body=\"404 | There was a internal error detected and operation has stopped. Please contact system support. | 404 (Page not found) | The page at",
-    "Error during search for 'Johnny LaDue': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=51783): Read timed out. (read timeout=120)",
-    "  Stuck on: title='mcassessor.maricopa.gov | 524: A timeout occurred' url=https://mcassessor.maricopa.gov/mcs/?q=Johnny+LaDue&mod=sm&search-type=rp&page=1 body='A timeout occurred Error code 524 | Visit cloudflare.com for more information. | 2026-10-25 13:04:56 UTC | You | Browser | Working | Los An",
-    "Error during search for 'Carl Wayne Allen': TimeoutException: Message:",
-    "Error during search for 'JANET M. WALROD (SCARLATA)': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=48289): Read timed out. (read timeout=120)",
-    "  Stuck on: title='mcassessor.maricopa.gov | 524: A timeout occurred' url=https://mcassessor.maricopa.gov/mcs/?q=JANET+WALROD&mod=sm&search-type=rp&page=1 body='A timeout occurred Error code 524 | Visit cloudflare.com for more information. | 2026-10-25 13:08:44 UTC | You | Browser | Working | Los An",
-    "Error during search for 'Norma Geneva Nelson': TimeoutException: Message:",
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=Norma+Nelson&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'",
-    "Error during search for 'William Antoine Feather (White)': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=William+Feather&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-25 ",
-    "Error during search for 'David H. Hursey': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=David+Hursey&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-25 13:",
-    "Error during search for 'Marc Kevin Jackson': TimeoutException: Message:",
-    "  Stuck on: title=\"Page not found: Maricopa County Assessor's Office\" url=https://mcassessor.maricopa.gov/mcs/?q=Marc+Jackson&mod=sm&search-type=rp&page=1 body=\"404 | There was a internal error detected and operation has stopped. Please contact system support. | 404 (Page not found) | The page at ht",
-    "Error during search for 'James R. Burroughs': TimeoutException: Message:",
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=James+Burroughs&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'",
-    "Error during search for 'Jay W. Smith': TimeoutException: Message:",
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=Jay+Smith&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'",
-    "Error during search for 'Frank Durham': TimeoutException: Message:",
-    "Error during search for 'Donajean Nelson': TimeoutException: Message:",
-    "  Stuck on: title=\"Page not found: Maricopa County Assessor's Office\" url=https://mcassessor.maricopa.gov/mcs/?q=Donajean+Nelson&mod=sm&search-type=rp&page=1 body=\"404 | There was a internal error detected and operation has stopped. Please contact system support. | 404 (Page not found) | The page at",
-    "Error during search for 'Margaret Louise Hacker': TimeoutException: Message:",
-    "Error during search for 'LUCY GLENA': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=LUCY+GLENA&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-25 13:13",
-    "Error during search for 'Cook (Christensen)': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=Cook+Cook&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-25 13:14:",
-    "Error during search for 'Helene Claudia Moschioni': TimeoutException: Message:",
-    "  Stuck on: title='500 - Internal server error.' url=https://mcassessor.maricopa.gov/mcs/?q=Helene+Moschioni&mod=sm&search-type=rp&page=1 body='Server Error | 500 - Internal server error. | There is a problem with the resource you are looking for, and it cannot be displayed.'"
+    "Error during search for 'Jamie (Buggy, Bugz, Looner) Douglas Monaco': TimeoutException: Message:"
    ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 116,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 1431,
+   "error_count": 15,
+   "error_lines": [
+    "Error processing 'Steven (Steve) Floyd Moen' (attempt 1/3): Message:",
+    "Error processing 'Steven (Steve) Floyd Moen' (attempt 2/3): Message:",
+    "Giving up on 'Steven (Steve) Floyd Moen' after 3 attempts: Message:",
+    "Error processing 'David (Alex) Alexander Bone' (attempt 1/3): Message:",
+    "Error processing 'David (Alex) Alexander Bone' (attempt 2/3): Message:",
+    "Giving up on 'David (Alex) Alexander Bone' after 3 attempts: Message:",
+    "Error processing 'David (Dave) Simons' (attempt 1/3): Message:",
+    "Error processing 'David (Dave) Simons' (attempt 2/3): Message:",
+    "Giving up on 'David (Dave) Simons' after 3 attempts: Message:",
+    "Error processing 'Clifford Delaware Swaim Jr.' (attempt 1/3): Message:",
+    "Error processing 'Clifford Delaware Swaim Jr.' (attempt 2/3): Message:",
+    "Giving up on 'Clifford Delaware Swaim Jr.' after 3 attempts: Message:",
+    "Error processing 'Patricia (Pat) Shepard' (attempt 1/3): Message:",
+    "Error processing 'Patricia (Pat) Shepard' (attempt 2/3): Message:",
+    "Giving up on 'Patricia (Pat) Shepard' after 3 attempts: Message:"
+   ]
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 1,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 53,
+   "error_count": 1,
+   "error_lines": [
+    "  -> Failed to get property value: Message:"
+   ]
   }
  ],
- "finished_at": "2026-10-25T13:17:11+00:00"
+ "finished_at": "2026-10-27T13:55:20+00:00"
 }

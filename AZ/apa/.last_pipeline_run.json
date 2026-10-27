@@ -1,39 +1,37 @@
 {
  "mode": "daily",
- "started_at": "2026-10-25T13:17:11+00:00",
+ "started_at": "2026-10-27T13:55:20+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 5,
+   "seconds": 128,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 22,
-   "error_count": 1,
-   "error_lines": [
-    "  WARNING: 'Moore' search spans 2 pages - only page 1 is searched."
-   ]
+   "seconds": 54,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 39,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-25T13:17:39+00:00"
+ "finished_at": "2026-10-27T13:59:02+00:00"
 }
