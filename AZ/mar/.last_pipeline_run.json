@@ -1,57 +1,40 @@
 {
  "mode": "daily",
- "started_at": "2026-10-27T13:18:15+00:00",
+ "started_at": "2026-10-29T14:08:41+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 26,
+   "seconds": 10,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 714,
-   "error_count": 1,
+   "seconds": 576,
+   "error_count": 2,
    "error_lines": [
-    "Error during search for 'Jamie (Buggy, Bugz, Looner) Douglas Monaco': TimeoutException: Message:"
+    "Error during search for 'Maureen Marske': TimeoutException: Message:",
+    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=Maureen+Marske&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-29 1"
    ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1431,
-   "error_count": 15,
-   "error_lines": [
-    "Error processing 'Steven (Steve) Floyd Moen' (attempt 1/3): Message:",
-    "Error processing 'Steven (Steve) Floyd Moen' (attempt 2/3): Message:",
-    "Giving up on 'Steven (Steve) Floyd Moen' after 3 attempts: Message:",
-    "Error processing 'David (Alex) Alexander Bone' (attempt 1/3): Message:",
-    "Error processing 'David (Alex) Alexander Bone' (attempt 2/3): Message:",
-    "Giving up on 'David (Alex) Alexander Bone' after 3 attempts: Message:",
-    "Error processing 'David (Dave) Simons' (attempt 1/3): Message:",
-    "Error processing 'David (Dave) Simons' (attempt 2/3): Message:",
-    "Giving up on 'David (Dave) Simons' after 3 attempts: Message:",
-    "Error processing 'Clifford Delaware Swaim Jr.' (attempt 1/3): Message:",
-    "Error processing 'Clifford Delaware Swaim Jr.' (attempt 2/3): Message:",
-    "Giving up on 'Clifford Delaware Swaim Jr.' after 3 attempts: Message:",
-    "Error processing 'Patricia (Pat) Shepard' (attempt 1/3): Message:",
-    "Error processing 'Patricia (Pat) Shepard' (attempt 2/3): Message:",
-    "Giving up on 'Patricia (Pat) Shepard' after 3 attempts: Message:"
-   ]
+   "seconds": 1957,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 53,
-   "error_count": 1,
-   "error_lines": [
-    "  -> Failed to get property value: Message:"
-   ]
+   "seconds": 0,
+   "error_count": 0,
+   "error_lines": []
   }
  ],
- "finished_at": "2026-10-27T13:55:20+00:00"
+ "finished_at": "2026-10-29T14:51:04+00:00"
 }
