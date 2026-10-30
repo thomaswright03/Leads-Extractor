@@ -1,22 +1,23 @@
 {
  "mode": "daily",
- "started_at": "2026-10-29T13:48:54+00:00",
+ "started_at": "2026-10-30T13:41:51+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 48,
+   "seconds": 87,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 158,
-   "error_count": 13,
+   "seconds": 174,
+   "error_count": 14,
    "error_lines": [
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
@@ -35,19 +36,17 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 263,
-   "error_count": 1,
-   "error_lines": [
-    "Error processing 'Russell Goodrich' (attempt 1/3): Message:"
-   ]
+   "seconds": 286,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 43,
+   "seconds": 27,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-29T13:57:27+00:00"
+ "finished_at": "2026-10-30T13:51:26+00:00"
 }

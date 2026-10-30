@@ -1,30 +1,27 @@
 {
  "mode": "daily",
- "started_at": "2026-10-29T14:08:41+00:00",
+ "started_at": "2026-10-30T14:07:25+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 10,
+   "seconds": 13,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 576,
-   "error_count": 2,
-   "error_lines": [
-    "Error during search for 'Maureen Marske': TimeoutException: Message:",
-    "  Stuck on: title='mcassessor.maricopa.gov | 520: Web server is returning an unknown error' url=https://mcassessor.maricopa.gov/mcs/?q=Maureen+Marske&mod=sm&search-type=rp&page=1 body='Web server is returning an unknown error Error code 520 | Visit cloudflare.com for more information. | 2026-10-29 1"
-   ]
+   "seconds": 622,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1957,
+   "seconds": 2024,
    "error_count": 0,
    "error_lines": []
   },
@@ -36,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-29T14:51:04+00:00"
+ "finished_at": "2026-10-30T14:51:44+00:00"
 }
