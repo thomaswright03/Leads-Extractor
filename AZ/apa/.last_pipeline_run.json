@@ -1,6 +1,6 @@
 {
  "mode": "daily",
- "started_at": "2026-10-30T14:51:44+00:00",
+ "started_at": "2026-10-31T14:19:32+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
@@ -14,26 +14,24 @@
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 25,
-   "error_count": 1,
-   "error_lines": [
-    "  WARNING: 'Anderson' search spans 2 pages - only page 1 is searched."
-   ]
+   "seconds": 9,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-10-30T14:52:15+00:00"
+ "finished_at": "2026-10-31T14:19:46+00:00"
 }
