@@ -1,27 +1,29 @@
 {
  "mode": "daily",
- "started_at": "2026-11-01T14:11:23+00:00",
+ "started_at": "2026-11-02T16:49:01+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 9,
+   "seconds": 7,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 331,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 354,
+   "error_count": 1,
+   "error_lines": [
+    "Error during search for 'Beverley Jean Pierce (Harper, Formerly Burkett)': TimeoutException: Message:"
+   ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 802,
+   "seconds": 464,
    "error_count": 0,
    "error_lines": []
   },
@@ -33,5 +35,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-01T14:30:26+00:00"
+ "finished_at": "2026-11-02T17:02:48+00:00"
 }

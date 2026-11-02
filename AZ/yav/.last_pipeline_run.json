@@ -1,6 +1,6 @@
 {
  "mode": "daily",
- "started_at": "2026-11-01T14:49:23+00:00",
+ "started_at": "2026-11-02T17:26:44+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
@@ -14,13 +14,9 @@
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 71,
-   "error_count": 3,
-   "error_lines": [
-    "Error during search for 'Frederick WEAVER, JR.': Message:",
-    "Error during search for 'Thomas Edward Twiss': Message:",
-    "Error during search for 'Alan B. Peterson': Message:"
-   ]
+   "seconds": 22,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
@@ -37,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-01T14:50:38+00:00"
+ "finished_at": "2026-11-02T17:27:12+00:00"
 }

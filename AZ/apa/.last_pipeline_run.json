@@ -1,32 +1,27 @@
 {
  "mode": "daily",
- "started_at": "2026-11-01T14:30:26+00:00",
+ "started_at": "2026-11-02T17:02:48+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 8,
+   "seconds": 4,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 487,
-   "error_count": 4,
-   "error_lines": [
-    "Error during search for 'Leo R. McLean': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=38263): Read timed out. (read timeout=120)",
-    "Error during search for 'Thomas J. Langan': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=53051): Read timed out. (read timeout=120)",
-    "Error during search for 'Concepcion \"Connie\" Orona': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=52127): Read timed out. (read timeout=120)",
-    "Error during search for 'David Lee Driessen': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=55815): Read timed out. (read timeout=120)"
-   ]
+   "seconds": 30,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 83,
    "error_count": 0,
    "error_lines": []
   },
@@ -38,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-01T14:38:43+00:00"
+ "finished_at": "2026-11-02T17:04:45+00:00"
 }
