@@ -1,22 +1,26 @@
 {
  "mode": "daily",
- "started_at": "2026-11-02T17:26:44+00:00",
+ "started_at": "2026-11-03T16:12:29+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 4,
+   "seconds": 5,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 22,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 97,
+   "error_count": 3,
+   "error_lines": [
+    "Error during search for 'Anna Marie Borchardt': Message:",
+    "Error during search for 'Jeffrey David Wolin': Message:",
+    "Error during search for 'Grace Gallegos': Message:"
+   ]
   },
   {
    "script": "DC.py",
@@ -33,5 +37,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-02T17:27:12+00:00"
+ "finished_at": "2026-11-03T16:14:12+00:00"
 }

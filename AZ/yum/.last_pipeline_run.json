@@ -1,37 +1,43 @@
 {
  "mode": "daily",
- "started_at": "2026-11-02T17:11:21+00:00",
+ "started_at": "2026-11-03T16:00:03+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 7,
+   "seconds": 6,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 489,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 470,
+   "error_count": 5,
+   "error_lines": [
+    "Browser session error on 'Arturo (Pampo, \"Oso) Moreno Cardenas' (attempt 1/2): TimeoutException: Message:",
+    "  Stuck on: title='Search' url=https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/search.jsp body='Account Search Sale Search Products Help? Logout Public Yuma Treasurer | Account Search | Contact Information | Address: | 197 S Main Street, Suite 201 |  | Yuma, Arizona 85364 |  | Phone: | (",
+    "Browser session error on 'Arturo (Pampo, \"Oso) Moreno Cardenas' (attempt 2/2): TimeoutException: Message:",
+    "  Stuck on: title='Search' url=https://yumacountyaz-assessor.tylerhost.net/assessor/taxweb/search.jsp body='Account Search Sale Search Products Help? Logout Public Yuma Treasurer | Account Search | Contact Information | Address: | 197 S Main Street, Suite 201 |  | Yuma, Arizona 85364 |  | Phone: | (",
+    "  Giving up on 'Arturo (Pampo, \"Oso) Moreno Cardenas' after a fresh-browser retry."
+   ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 411,
+   "seconds": 254,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 16,
+   "seconds": 15,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-02T17:26:44+00:00"
+ "finished_at": "2026-11-03T16:12:29+00:00"
 }
