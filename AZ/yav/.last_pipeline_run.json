@@ -1,6 +1,6 @@
 {
  "mode": "daily",
- "started_at": "2026-11-03T16:12:29+00:00",
+ "started_at": "2026-11-04T16:11:58+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
@@ -14,28 +14,24 @@
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 97,
-   "error_count": 3,
-   "error_lines": [
-    "Error during search for 'Anna Marie Borchardt': Message:",
-    "Error during search for 'Jeffrey David Wolin': Message:",
-    "Error during search for 'Grace Gallegos': Message:"
-   ]
+   "seconds": 52,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-03T16:14:12+00:00"
+ "finished_at": "2026-11-04T16:12:56+00:00"
 }
