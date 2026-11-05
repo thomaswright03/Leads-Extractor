@@ -1,22 +1,31 @@
 {
  "mode": "daily",
- "started_at": "2026-11-04T16:11:58+00:00",
+ "started_at": "2026-11-05T16:23:24+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 5,
+   "seconds": 4,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 52,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 194,
+   "error_count": 8,
+   "error_lines": [
+    "Error during search for 'Ruby Ann Badger': Message:",
+    "Error during search for 'Geraldine E. Beaudin': Message:",
+    "Error during search for 'Bill Ronald Adams': Message:",
+    "Error during search for 'Marylyn Clark': Message:",
+    "Error during search for 'Liesl Jegge Hall': Message:",
+    "Error during search for 'Eileen Patrice Brink': Message:",
+    "Error during search for 'Rusty J Lorenzen': Message:",
+    "Error during search for 'Elizabeth Marie McCumber': Message:"
+   ]
   },
   {
    "script": "DC.py",
@@ -33,5 +42,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-04T16:12:56+00:00"
+ "finished_at": "2026-11-05T16:26:42+00:00"
 }
