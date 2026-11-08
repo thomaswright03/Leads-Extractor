@@ -1,29 +1,35 @@
 {
  "mode": "daily",
- "started_at": "2026-11-07T14:16:07+00:00",
+ "started_at": "2026-11-08T14:17:56+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 10,
+   "seconds": 6,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 1132,
+   "seconds": 497,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1558,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 5045,
+   "error_count": 5,
+   "error_lines": [
+    "Error processing 'Vincent (Vince) A. Martell' (attempt 1/3): HTTPConnectionPool(host='localhost', port=43151): Max retries exceeded with url: /session/d99c79bd0bdb1cd87edead851a7b845b/url (Caused by ReadTimeoutError(\"HTTPConnectionPool(host='localhost', port=43151): Read timed out. (read timeout=120",
+    "Error processing 'Barbara (Barb) J. Clark (Sisk)' (attempt 1/3): HTTPConnectionPool(host='localhost', port=58423): Max retries exceeded with url: /session/d7ebda8dd184cef912f12930068d4c1c/url (Caused by ReadTimeoutError(\"HTTPConnectionPool(host='localhost', port=58423): Read timed out. (read timeout",
+    "Error processing 'Barbara (Barb) J. Clark (Sisk)' (attempt 2/3): HTTPConnectionPool(host='localhost', port=42785): Max retries exceeded with url: /session/156209bac25f9d1ccc2e07c6a21959b7/url (Caused by ReadTimeoutError(\"HTTPConnectionPool(host='localhost', port=42785): Read timed out. (read timeout",
+    "Giving up on 'Barbara (Barb) J. Clark (Sisk)' after 3 attempts: Message: session not created: cannot connect to chrome at 127.0.0.1:49489",
+    "from chrome not reachable; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#sessionnotcreatedexception"
+   ]
   },
   {
    "script": "pricer.py",
@@ -33,5 +39,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-07T15:01:06+00:00"
+ "finished_at": "2026-11-08T15:50:24+00:00"
 }

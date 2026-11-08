@@ -1,27 +1,27 @@
 {
  "mode": "daily",
- "started_at": "2026-11-07T15:03:10+00:00",
+ "started_at": "2026-11-08T15:51:22+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 8,
+   "seconds": 6,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 77,
+   "seconds": 18,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 297,
+   "seconds": 38,
    "error_count": 0,
    "error_lines": []
   },
@@ -33,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-07T15:09:33+00:00"
+ "finished_at": "2026-11-08T15:52:24+00:00"
 }
