@@ -1,6 +1,6 @@
 {
  "mode": "daily",
- "started_at": "2026-11-09T17:33:03+00:00",
+ "started_at": "2026-11-10T17:09:19+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
@@ -14,9 +14,13 @@
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 40,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 114,
+   "error_count": 3,
+   "error_lines": [
+    "Error during search for 'Lynn Wilburta Wright': Message:",
+    "Error during search for 'Mary Baldwin': Message:",
+    "Error during search for 'Christopher Allan Phelps': Message:"
+   ]
   },
   {
    "script": "DC.py",
@@ -33,5 +37,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-09T17:33:47+00:00"
+ "finished_at": "2026-11-10T17:11:19+00:00"
 }
