@@ -1,41 +1,37 @@
 {
  "mode": "daily",
- "started_at": "2026-11-10T17:09:19+00:00",
+ "started_at": "2026-11-11T17:36:42+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 4,
+   "seconds": 8,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 114,
-   "error_count": 3,
-   "error_lines": [
-    "Error during search for 'Lynn Wilburta Wright': Message:",
-    "Error during search for 'Mary Baldwin': Message:",
-    "Error during search for 'Christopher Allan Phelps': Message:"
-   ]
+   "seconds": 32,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-10T17:11:19+00:00"
+ "finished_at": "2026-11-11T17:37:23+00:00"
 }
