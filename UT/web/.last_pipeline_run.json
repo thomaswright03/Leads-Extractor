@@ -1,6 +1,6 @@
 {
  "mode": "daily",
- "started_at": "2026-11-13T07:18:57+00:00",
+ "started_at": "2026-11-14T07:13:02+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
@@ -14,24 +14,24 @@
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 111,
+   "seconds": 130,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 164,
+   "seconds": 220,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-13T07:23:38+00:00"
+ "finished_at": "2026-11-14T07:18:57+00:00"
 }
