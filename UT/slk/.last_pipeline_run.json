@@ -1,33 +1,24 @@
 {
  "mode": "daily",
- "started_at": "2026-11-16T07:07:39+00:00",
+ "started_at": "2026-11-17T07:02:31+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 19,
+   "seconds": 8,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 165,
-   "error_count": 16,
+   "seconds": 80,
+   "error_count": 7,
    "error_lines": [
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "[07:08:52] Error during search for Blackham: TimeoutException: Message:",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
-    "[07:09:54] Error during search for Larsen: TimeoutException: Message:",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
@@ -38,17 +29,17 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 202,
+   "seconds": 24,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 47,
+   "seconds": 15,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-16T07:14:51+00:00"
+ "finished_at": "2026-11-17T07:04:37+00:00"
 }
