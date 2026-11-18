@@ -1,37 +1,45 @@
 {
  "mode": "daily",
- "started_at": "2026-11-17T08:06:17+00:00",
+ "started_at": "2026-11-18T07:59:00+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 4,
+   "seconds": 8,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 58,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 186,
+   "error_count": 7,
+   "error_lines": [
+    "Error during search for 'Marie Connally': Message:",
+    "Error during search for 'Jacqueline Martinez': Message:",
+    "Error during search for 'Russell Frank Harris': Message:",
+    "Error during search for 'Rudy Ruiz': Message:",
+    "Error during search for 'Elaine Marolakos Edelson': Message:",
+    "Error during search for 'Robert O. Gilberto': Message:",
+    "Error during search for 'Wanda Jenkins': Message:"
+   ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-17T08:07:20+00:00"
+ "finished_at": "2026-11-18T08:02:14+00:00"
 }

@@ -1,37 +1,27 @@
 {
  "mode": "daily",
- "started_at": "2026-11-17T07:51:48+00:00",
- "ok": true,
- "failed_step": null,
+ "started_at": "2026-11-18T07:50:23+00:00",
+ "ok": false,
+ "failed_step": "$.py",
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 9,
+   "seconds": 8,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
-   "returncode": 0,
-   "seconds": 59,
-   "error_count": 0,
-   "error_lines": []
-  },
-  {
-   "script": "DC.py",
-   "returncode": 0,
-   "seconds": 315,
-   "error_count": 0,
-   "error_lines": []
-  },
-  {
-   "script": "pricer.py",
-   "returncode": 0,
-   "seconds": 1,
-   "error_count": 0,
-   "error_lines": []
+   "returncode": 1,
+   "seconds": 51,
+   "error_count": 3,
+   "error_lines": [
+    "Traceback (most recent call last):",
+    "    raise HTTPError(http_error_msg, response=self)",
+    "requests.exceptions.HTTPError: 520 Server Error: <none> for url: https://www.asr.pima.gov/AssessorSiteData/api/get/dynamicdetails/?function=GetPublicWebYear"
+   ]
   }
  ],
- "finished_at": "2026-11-17T07:58:11+00:00"
+ "finished_at": "2026-11-18T07:51:22+00:00"
 }

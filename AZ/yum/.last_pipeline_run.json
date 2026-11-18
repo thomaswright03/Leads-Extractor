@@ -1,37 +1,37 @@
 {
  "mode": "daily",
- "started_at": "2026-11-17T07:58:11+00:00",
+ "started_at": "2026-11-18T07:51:22+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 7,
+   "seconds": 10,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 358,
+   "seconds": 338,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 106,
+   "seconds": 96,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 15,
+   "seconds": 14,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-17T08:06:17+00:00"
+ "finished_at": "2026-11-18T07:59:00+00:00"
 }
