@@ -1,6 +1,6 @@
 {
  "mode": "daily",
- "started_at": "2026-11-20T07:48:33+00:00",
+ "started_at": "2026-11-21T07:57:35+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
@@ -14,14 +14,14 @@
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 363,
+   "seconds": 359,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 126,
+   "seconds": 64,
    "error_count": 0,
    "error_lines": []
   },
@@ -33,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-20T07:57:05+00:00"
+ "finished_at": "2026-11-21T08:05:00+00:00"
 }
