@@ -1,31 +1,22 @@
 {
  "mode": "daily",
- "started_at": "2026-11-21T08:05:00+00:00",
+ "started_at": "2026-11-22T07:37:29+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 8,
+   "seconds": 4,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 189,
-   "error_count": 8,
-   "error_lines": [
-    "Error during search for 'Kimberly May Johnson': Message:",
-    "Error during search for 'John Gardner': Message:",
-    "Error during search for 'Claudette Mahar': Message:",
-    "Error during search for 'Judith Ann Winebarger (Bittle)': Message:",
-    "Error during search for 'Coralee Cooper': Message:",
-    "Error during search for 'Ruth Michaels Tamblyn': Message:",
-    "Error during search for 'Judith (Judy) Ann Howard (Hertzler)': Message:",
-    "Error during search for 'Sarah R. Tyrrell': Message:"
-   ]
+   "seconds": 55,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
@@ -42,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-21T08:08:18+00:00"
+ "finished_at": "2026-11-22T07:38:29+00:00"
 }

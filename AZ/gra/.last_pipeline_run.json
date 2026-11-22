@@ -1,25 +1,22 @@
 {
  "mode": "daily",
- "started_at": "2026-11-21T07:52:26+00:00",
+ "started_at": "2026-11-22T07:32:56+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 5,
+   "seconds": 4,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 243,
-   "error_count": 2,
-   "error_lines": [
-    "Error during search for 'Linda Lee Jernigan': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=42683): Read timed out. (read timeout=120)",
-    "Error during search for 'Enrique M. Chanez': ReadTimeoutError: HTTPConnectionPool(host='localhost', port=53593): Read timed out. (read timeout=120)"
-   ]
+   "seconds": 8,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "DC.py",
@@ -36,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-21T07:56:35+00:00"
+ "finished_at": "2026-11-22T07:33:09+00:00"
 }
