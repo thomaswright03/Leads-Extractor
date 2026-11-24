@@ -1,20 +1,20 @@
 {
  "mode": "daily",
- "started_at": "2026-11-23T07:03:18+00:00",
+ "started_at": "2026-11-24T07:01:59+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 20,
+   "seconds": 17,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 57,
+   "seconds": 54,
    "error_count": 5,
    "error_lines": [
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
@@ -27,19 +27,17 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 41,
-   "error_count": 1,
-   "error_lines": [
-    "Error processing 'Theodore \"\u201cTed\u201d\" Giannopoulos' (attempt 1/3): Message:"
-   ]
+   "seconds": 1,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 14,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-23T07:05:31+00:00"
+ "finished_at": "2026-11-24T07:03:11+00:00"
 }

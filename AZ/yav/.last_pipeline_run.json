@@ -1,37 +1,40 @@
 {
  "mode": "daily",
- "started_at": "2026-11-23T07:25:38+00:00",
+ "started_at": "2026-11-24T07:50:22+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 4,
+   "seconds": 5,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 6,
-   "error_count": 0,
-   "error_lines": []
+   "seconds": 102,
+   "error_count": 2,
+   "error_lines": [
+    "Error during search for 'Joanne Frances Barry': Message:",
+    "Error during search for 'Iris Jeanice Allen': Message:"
+   ]
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 0,
+   "seconds": 1,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-23T07:25:49+00:00"
+ "finished_at": "2026-11-24T07:52:11+00:00"
 }
