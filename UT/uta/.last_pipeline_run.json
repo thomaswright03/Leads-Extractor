@@ -1,39 +1,37 @@
 {
  "mode": "daily",
- "started_at": "2026-11-24T07:03:11+00:00",
+ "started_at": "2026-11-25T07:03:54+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 122,
-   "error_count": 1,
-   "error_lines": [
-    "Error during execution: HTTPConnectionPool(host='localhost', port=58473): Read timed out. (read timeout=120)"
-   ]
+   "seconds": 37,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 190,
+   "seconds": 338,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 73,
+   "seconds": 197,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "pricer.py",
    "returncode": 0,
-   "seconds": 1,
+   "seconds": 0,
    "error_count": 0,
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-24T07:09:37+00:00"
+ "finished_at": "2026-11-25T07:13:28+00:00"
 }
