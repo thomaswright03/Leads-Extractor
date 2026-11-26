@@ -1,31 +1,29 @@
 {
  "mode": "daily",
- "started_at": "2026-11-25T07:18:06+00:00",
+ "started_at": "2026-11-26T07:13:19+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "obi.py",
    "returncode": 0,
-   "seconds": 8,
+   "seconds": 11,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "$.py",
    "returncode": 0,
-   "seconds": 975,
+   "seconds": 821,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 1074,
-   "error_count": 1,
-   "error_lines": [
-    "Error processing 'Karl Emory Waldron' (attempt 1/3): Message:"
-   ]
+   "seconds": 937,
+   "error_count": 0,
+   "error_lines": []
   },
   {
    "script": "pricer.py",
@@ -35,5 +33,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-25T07:52:24+00:00"
+ "finished_at": "2026-11-26T07:42:49+00:00"
 }
