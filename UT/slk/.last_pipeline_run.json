@@ -1,22 +1,24 @@
 {
  "mode": "daily",
- "started_at": "2026-11-27T07:02:14+00:00",
+ "started_at": "2026-11-28T07:02:15+00:00",
  "ok": true,
  "failed_step": null,
  "steps": [
   {
    "script": "SLKobi.py",
    "returncode": 0,
-   "seconds": 11,
+   "seconds": 23,
    "error_count": 0,
    "error_lines": []
   },
   {
    "script": "SLK$.py",
    "returncode": 0,
-   "seconds": 153,
-   "error_count": 15,
+   "seconds": 131,
+   "error_count": 17,
    "error_lines": [
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
+    "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
     "/home/runner/work/Leads-Extractor/Leads-Extractor/UT/slk/SLK$.py:316: Pandas4Warning: The xlrd engine is deprecated and will be removed in a future version. Use the calamine engine instead, by setting engine='calamine'.",
@@ -37,7 +39,7 @@
   {
    "script": "DC.py",
    "returncode": 0,
-   "seconds": 65,
+   "seconds": 95,
    "error_count": 0,
    "error_lines": []
   },
@@ -49,5 +51,5 @@
    "error_lines": []
   }
  ],
- "finished_at": "2026-11-27T07:06:30+00:00"
+ "finished_at": "2026-11-28T07:06:52+00:00"
 }
